@@ -71,6 +71,8 @@ export interface User {
 export interface CartItem {
   product: Product;
   quantity: number;
+  selectedDosage?: string;
+  price?: number;
 }
 
 export interface PrescriptionFile {
@@ -84,8 +86,10 @@ export interface Order {
   userId: string;
   userName: string;
   userEmail: string;
+  userPhone?: string;
   customerPhone?: string;
   address?: User['address'];
+  deliveryAddress?: User['address'] | string;
   items: CartItem[];
   subtotal: number;
   deliveryFee: number;

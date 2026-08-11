@@ -5,6 +5,7 @@ import { StoreSettings } from '../types';
 
 interface SplashScreenProps {
   onFinish?: () => void;
+  onComplete?: () => void;
   settings?: StoreSettings;
   isPreview?: boolean;
   onClosePreview?: () => void;
@@ -12,16 +13,19 @@ interface SplashScreenProps {
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({
   onFinish,
+  onComplete,
   settings,
   isPreview = false,
   onClosePreview,
 }) => {
   const [logoError, setLogoError] = useState(false);
 
+  const handleFinish = onFinish || onComplete;
+
   useEffect(() => {
-    if (!isPreview && onFinish) {
+    if (!isPreview && handleFinish) {
       const timer = setTimeout(() => {
-        onFinish();
+        handleFinish();
       }, 2500);
 
       return () => clearTimeout(timer);

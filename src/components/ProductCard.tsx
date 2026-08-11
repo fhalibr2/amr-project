@@ -7,8 +7,7 @@ import { isOfferActive, getOfferStatusDetails } from '../utils/offerUtils';
 interface ProductCardProps {
   product: Product;
   onSelect: (product: Product) => void;
-  // Unified signature: quantity is optional; event may be passed as third param
-  onAddToCart: (product: Product, quantity?: number, e?: React.MouseEvent) => void;
+  onAddToCart: (product: Product, e: React.MouseEvent) => void;
   showStockToCustomer?: boolean;
 }
 
@@ -66,7 +65,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <div
       onClick={() => onSelect(product)}
-      className="group relative bg-white rounded-3xl border border-slate-200 hover:border-rose-400 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col"
+      className="group relative bg-white rounded-3xl border border-slate-200 hover:border-rose-400 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-between p-4 sm:p-5 shadow-xs"
     >
       {/* Header Badges */}
       <div className="flex flex-wrap items-center justify-between gap-1 z-10 mb-2">
@@ -82,7 +81,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
       {/* Image Container */}
-      <div className="relative w-full aspect-4/3 sm:aspect-square bg-slate-50/80 rounded-2xl overflow-hidden flex items-center justify-center p-3 my-1 group-hover:scale-102 transition-transform duration-300">
+      <div className="relative w-full aspect-4/3 sm:aspect-square bg-slate-50/80 rounded-2xl overflow-hidden flex items-center justify-center p-3 my-1 group-hover:scale-102 transition-transform duration-300 border border-slate-100">
         {product.image ? (
           <img
             src={product.image}
@@ -161,7 +160,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                       e.stopPropagation();
                       onSelect(product);
                     }}
-                    className="bg-amber-600 hover:bg-amber-700 text-white p-2.5 sm:px-3 sm:py-2 rounded-2xl font-extrabold text-xs flex items-center gap-1.5 shadow-sm active:scale-90 transition"
+                    className="bg-amber-600 hover:bg-amber-700 text-white p-2.5 sm:px-3 sm:py-2 rounded-2xl font-extrabold text-xs flex items-center gap-1.5 shadow-sm active:scale-90 transition shrink-0 z-10"
                     title="Consultar no balcão"
                   >
                     <HelpCircle className="w-4 h-4" />
@@ -191,10 +190,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        // Explicitly pass quantity=1 to avoid signature mismatch where event could be interpreted as quantity
-                        onAddToCart(product, 1, e);
+                        onAddToCart(product, e);
                       }}
-                      className="bg-rose-600 hover:bg-rose-700 text-white p-2.5 sm:px-3 sm:py-2 rounded-2xl font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-95 transition"
+                      className="bg-rose-600 hover:bg-rose-700 text-white p-2.5 sm:px-3 sm:py-2 rounded-2xl font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-90 transition shrink-0 z-10 cursor-pointer"
                       title="Adicionar ao carrinho"
                     >
                       <Plus className="w-4 h-4" />

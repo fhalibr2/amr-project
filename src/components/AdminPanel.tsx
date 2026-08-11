@@ -2545,7 +2545,15 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
 
                             {order.deliveryType === 'delivery' && (
                               <div className="text-slate-600 text-xs">
-                                📍 Endereço: <strong>{order.deliveryAddress || 'Endereço cadastrado no app'}</strong>
+                                📍 Endereço: <strong>
+                                  {typeof order.deliveryAddress === 'string' 
+                                    ? order.deliveryAddress 
+                                    : (order.deliveryAddress 
+                                        ? `${order.deliveryAddress.street || ''}, ${order.deliveryAddress.number || ''} ${order.deliveryAddress.neighborhood || ''}`
+                                        : (order.address 
+                                            ? `${order.address.street || ''}, ${order.address.number || ''} ${order.address.neighborhood || ''}` 
+                                            : 'Endereço cadastrado no app'))}
+                                </strong>
                               </div>
                             )}
                           </div>
@@ -4623,7 +4631,15 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                 <div>TEL: <strong>{thermalPrintOrder.userPhone || 'Não informado'}</strong></div>
                 <div>TIPO: <strong>{thermalPrintOrder.deliveryType === 'delivery' ? 'ENTREGA DOMICÍLIO' : 'RETIRADA NA LOJA'}</strong></div>
                 {thermalPrintOrder.deliveryType === 'delivery' && (
-                  <div className="text-[10px]">END: {thermalPrintOrder.deliveryAddress}</div>
+                  <div className="text-[10px]">
+                    END: {typeof thermalPrintOrder.deliveryAddress === 'string'
+                      ? thermalPrintOrder.deliveryAddress
+                      : (thermalPrintOrder.deliveryAddress
+                          ? `${thermalPrintOrder.deliveryAddress.street || ''}, ${thermalPrintOrder.deliveryAddress.number || ''}`
+                          : (thermalPrintOrder.address
+                              ? `${thermalPrintOrder.address.street || ''}, ${thermalPrintOrder.address.number || ''}`
+                              : 'Endereço cadastrado'))}
+                  </div>
                 )}
               </div>
 

@@ -262,6 +262,23 @@ export default function App() {
       return;
     }
 
+    const safeQtyToAdd =
+      typeof quantityToAdd === 'number' && !isNaN(quantityToAdd) && quantityToAdd > 0
+        ? quantityToAdd
+        : 1;
+
+    // Check stock BEFORE setCart
+    const existingItem = cart.find(item => item?.product?.id === product.id);
+    const currentQty = existingItem 
+      ? (typeof existingItem.quantity === 'number' && !isNaN(existingItem.quantity) ? existingItem.quantity : 1) 
+      : 0;
+    const newQty = currentQty + safeQtyToAdd;
+
+    if (newQty > safeStock) {
+      showToast(`Limite em estoque: ${safeStock} unidades`);
+      return;
+    }
+
     // Play Sound Effect
     if (settings.soundEnabled) {
       try {
@@ -318,11 +335,6 @@ export default function App() {
       setTimeout(() => setIsCartBouncing(false), 450);
     }, 600);
 
-    const safeQtyToAdd =
-      typeof quantityToAdd === 'number' && !isNaN(quantityToAdd) && quantityToAdd > 0
-        ? quantityToAdd
-        : 1;
-
     setCart((prev) => {
       const existingIdx = prev.findIndex((item) => item?.product?.id === product.id);
       if (existingIdx >= 0) {
@@ -331,22 +343,15 @@ export default function App() {
           typeof updated[existingIdx]?.quantity === 'number' && !isNaN(updated[existingIdx].quantity)
             ? updated[existingIdx].quantity
             : 1;
-        const newQty = currentQty + safeQtyToAdd;
-        if (newQty > safeStock) {
-          showToast(`Limite em estoque: ${safeStock} unidades`);
-          return prev;
-        }
+        const nextQty = Math.min(currentQty + safeQtyToAdd, safeStock);
         updated[existingIdx] = {
           ...updated[existingIdx],
-          quantity: newQty,
+          quantity: nextQty,
         };
         return updated;
       } else {
-        if (safeQtyToAdd > safeStock) {
-          showToast(`Limite em estoque: ${safeStock} unidades`);
-          return prev;
-        }
-        return [...prev, { product, quantity: safeQtyToAdd }];
+        const nextQty = Math.min(safeQtyToAdd, safeStock);
+        return [...prev, { product, quantity: nextQty }];
       }
     });
 
@@ -358,19 +363,26 @@ export default function App() {
       setCart((prev) => prev.filter((_, i) => i !== index));
       return;
     }
+    
+    // Check stock BEFORE setCart
+    const item = cart[index];
+    if (!item) return;
+    const stock = typeof item.product?.stock === 'number' ? item.product.stock : 0;
+    
+    if (newQty > stock) {
+      showToast(`Limite em estoque: ${stock} unidades`);
+      return;
+    }
+    
     setCart((prev) => {
       const updated = [...prev];
-      const item = updated[index];
-      if (!item) return prev;
-      const stock = typeof item.product?.stock === 'number' ? item.product.stock : 0;
-      if (newQty > stock) {
-        showToast(`Limite em estoque: ${stock} unidades`);
-        return prev;
+      if (updated[index]) {
+        const itemStock = typeof updated[index].product?.stock === 'number' ? updated[index].product.stock : 0;
+        updated[index] = {
+          ...updated[index],
+          quantity: Math.min(newQty, itemStock),
+        };
       }
-      updated[index] = {
-        ...updated[index],
-        quantity: newQty,
-      };
       return updated;
     });
   };

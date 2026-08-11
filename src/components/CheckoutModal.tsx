@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CartItem, Order, User, PrescriptionFile } from '../types';
+import { CartItem, Order, User, PrescriptionFile, StoreSettings } from '../types';
 import {
   X,
   CheckCircle2,
@@ -24,6 +24,7 @@ import {
 
 interface CheckoutModalProps {
   items: CartItem[];
+  settings?: StoreSettings;
   currentUser: User | null;
   onCompleteOrder: (orderData: Partial<Order>) => void;
   onClose: () => void;
