@@ -12,6 +12,7 @@ import { AdminLoginModal } from './components/AdminLoginModal';
 import { UserAccountModal } from './components/UserAccountModal';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
+import { MedicineBoxSvg } from './components/MedicineBoxSvg';
 import {
   Pill,
   ShoppingBag,
@@ -87,6 +88,23 @@ export default function App() {
   const [userModalNotice, setUserModalNotice] = useState<string | null>(null);
   const [isDesktopView, setIsDesktopView] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Cart Button Ref & Flying Particle Animation States
+  const cartButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isCartBouncing, setIsCartBouncing] = useState(false);
+  const [flyingParticles, setFlyingParticles] = useState<
+    {
+      id: number;
+      startX: number;
+      startY: number;
+      endX: number;
+      endY: number;
+      image?: string;
+      prescriptionType?: string;
+      isGeneric?: boolean;
+      name?: string;
+    }[]
+  >([]);
 
   const categoryRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
@@ -176,6 +194,52 @@ export default function App() {
       return;
     }
 
+    // Play Sound Effect
+    if (settings.soundEnabled) {
+      soundManager.playBeepSuccess();
+    }
+
+    // Flying Particle Animation Effect
+    let startX = window.innerWidth / 2;
+    let startY = window.innerHeight / 2;
+
+    if (e && e.clientX && e.clientY) {
+      startX = e.clientX - 20;
+      startY = e.clientY - 20;
+    }
+
+    let endX = window.innerWidth - 60;
+    let endY = 30;
+
+    if (cartButtonRef.current) {
+      const rect = cartButtonRef.current.getBoundingClientRect();
+      endX = rect.left + rect.width / 2 - 20;
+      endY = rect.top + rect.height / 2 - 20;
+    }
+
+    const particleId = Date.now() + Math.random();
+    setFlyingParticles((prev) => [
+      ...prev,
+      {
+        id: particleId,
+        startX,
+        startY,
+        endX,
+        endY,
+        image: product.image,
+        prescriptionType: product.prescriptionType,
+        isGeneric: product.isGeneric,
+        name: product.name,
+      },
+    ]);
+
+    // When particle lands (~600ms)
+    setTimeout(() => {
+      setFlyingParticles((prev) => prev.filter((p) => p.id !== particleId));
+      setIsCartBouncing(true);
+      setTimeout(() => setIsCartBouncing(false), 450);
+    }, 600);
+
     setCart((prev) => {
       const existingIdx = prev.findIndex((item) => item.product.id === product.id);
       if (existingIdx >= 0) {
@@ -192,7 +256,7 @@ export default function App() {
       }
     });
 
-    showToast(`${product.name} adicionado ao carrinho!`);
+    showToast(`🛒 ${product.name} adicionado ao carrinho!`);
   };
 
   const handleUpdateCartQuantity = (index: number, newQty: number) => {
@@ -405,13 +469,20 @@ export default function App() {
 
               {/* Cart Button */}
               <button
+                ref={cartButtonRef}
                 onClick={() => setIsCartOpen(true)}
-                className="relative p-2 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 transition"
+                className={`relative p-2 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 transition ${
+                  isCartBouncing ? 'animate-cartBump ring-4 ring-rose-400/50 bg-rose-200' : ''
+                }`}
                 aria-label="Ver carrinho"
               >
                 <ShoppingBag className="w-5 h-5 text-rose-600" />
                 {totalCartItems > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-md animate-bounce">
+                  <span
+                    className={`absolute -top-1 -right-1 bg-rose-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-md transition-all ${
+                      isCartBouncing ? 'scale-125 bg-red-600 ring-2 ring-white' : 'animate-bounce'
+                    }`}
+                  >
                     {totalCartItems}
                   </span>
                 )}
@@ -768,6 +839,29 @@ export default function App() {
           onClose={() => setIsAdminPanelOpen(false)}
         />
       )}
+      {/* Flying Particle Animations when adding to Cart */}
+      {flyingParticles.map((particle) => (
+        <div
+          key={particle.id}
+          style={{
+            '--start-x': `${particle.startX}px`,
+            '--start-y': `${particle.startY}px`,
+            '--end-x': `${particle.endX}px`,
+            '--end-y': `${particle.endY}px`,
+          } as React.CSSProperties}
+          className="fixed z-50 pointer-events-none w-11 h-11 rounded-2xl bg-white border-2 border-rose-500 shadow-2xl flex items-center justify-center p-1 animate-flyToCart"
+        >
+          {particle.image ? (
+            <img src={particle.image} alt="" className="w-full h-full object-contain" />
+          ) : (
+            <MedicineBoxSvg
+              prescriptionType={particle.prescriptionType as any}
+              isGeneric={particle.isGeneric}
+              name={particle.name || 'Remédio'}
+            />
+          )}
+        </div>
+      ))}
     </div>
   );
 }

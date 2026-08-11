@@ -1,0 +1,23 @@
+=====================================================
+RELATÓRIO GERAL DE CADASTROS DE CLIENTES - DROGARIA AMERICANA
+=====================================================
+Data de Emissão: 11/08/2026 10:00:00 | Total: 2 Clientes
+=====================================================
+
+[CLIENTE #1]
+ID: usr_1001
+Nome: Carlos Eduardo Silva
+CPF: 123.456.789-00
+Email: carlos.silva@email.com
+Telefone: (11) 98765-4321
+Endereço: Avenida Paulista, Nº 1500 (Apto 42 - Bloco B) - Bairro: Bela Vista, São Paulo/SP (CEP: 01310-200)
+-----------------------------------------------------
+
+[CLIENTE #2]
+ID: usr_1002
+Nome: Maria Oliveira Santos
+CPF: 987.654.321-11
+Email: maria.santos@email.com
+Telefone: (11) 97123-8899
+Endereço: Rua Augusta, Nº 800 - Bairro: Consolação, São Paulo/SP (CEP: 01304-000)
+-----------------------------------------------------

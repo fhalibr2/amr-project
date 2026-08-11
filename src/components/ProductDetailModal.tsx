@@ -6,7 +6,7 @@ import { X, Plus, Minus, ShoppingBag, AlertTriangle, FileText, Lock, ShieldCheck
 interface ProductDetailModalProps {
   product: Product | null;
   onClose: () => void;
-  onAddToCart: (product: Product, quantity: number) => void;
+  onAddToCart: (product: Product, quantity: number, e?: React.MouseEvent) => void;
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
@@ -31,8 +31,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     }
   };
 
-  const handleAdd = () => {
-    onAddToCart(product, quantity);
+  const handleAdd = (e: React.MouseEvent) => {
+    onAddToCart(product, quantity, e);
     onClose();
   };
 

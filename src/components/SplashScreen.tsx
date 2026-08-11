@@ -22,7 +22,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     if (!isPreview && onFinish) {
       const timer = setTimeout(() => {
         onFinish();
-      }, 1400);
+      }, 2500);
 
       return () => clearTimeout(timer);
     }
@@ -37,8 +37,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      transition={{ duration: 0.4 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-rose-950 via-rose-900 to-red-950 text-white p-6 shadow-2xl"
+      transition={{ duration: 0.6 }}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-rose-900 via-rose-800 to-red-900 text-white p-6 shadow-2xl"
     >
       {isPreview && (
         <div className="absolute top-5 right-5 z-10 flex items-center gap-2">

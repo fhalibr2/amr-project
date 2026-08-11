@@ -20,7 +20,175 @@ import {
   RefreshCw,
   MessageCircle,
   ArrowLeft,
+  Download,
+  Upload,
 } from 'lucide-react';
+
+export const DEFAULT_PRESET_USERS: User[] = [
+  {
+    id: 'usr_1001',
+    name: 'Carlos Eduardo Silva',
+    email: 'carlos.silva@email.com',
+    cpf: '123.456.789-00',
+    phone: '(11) 98765-4321',
+    password: '12345678',
+    pin: '12345678',
+    isAdmin: false,
+    address: {
+      street: 'Avenida Paulista',
+      number: '1500',
+      neighborhood: 'Bela Vista',
+      complement: 'Apto 42 - Bloco B',
+      city: 'São Paulo',
+      state: 'SP',
+      cep: '01310-200',
+    },
+  },
+  {
+    id: 'usr_1002',
+    name: 'Maria Oliveira Santos',
+    email: 'maria.santos@email.com',
+    cpf: '987.654.321-11',
+    phone: '(11) 97123-8899',
+    password: '12345678',
+    pin: '12345678',
+    isAdmin: false,
+    address: {
+      street: 'Rua Augusta',
+      number: '800',
+      neighborhood: 'Consolação',
+      complement: '',
+      city: 'São Paulo',
+      state: 'SP',
+      cep: '01304-000',
+    },
+  },
+];
+
+export const parseUserFromTxt = (text: string): User | null => {
+  try {
+    const getValue = (label: string): string => {
+      const regex = new RegExp(`${label}:?\\s*([^\\n\\r]+)`, 'i');
+      const match = text.match(regex);
+      return match ? match[1].trim() : '';
+    };
+
+    const id = getValue('ID do Cliente') || `usr_${Date.now()}`;
+    const name = getValue('Nome Completo') || getValue('Nome') || 'Cliente';
+    const email = getValue('E-mail') || getValue('Email') || '';
+    const cpf = getValue('CPF') || '';
+    const phone = getValue('Telefone/WhatsApp') || getValue('Telefone') || '';
+    const pin = getValue('PIN de Segurança \\(8 Dígitos\\)') || getValue('PIN') || '';
+    const street = getValue('Logradouro') || '';
+    const number = getValue('Nº') || getValue('Número') || 'S/N';
+    const neighborhood = getValue('Bairro') || '';
+    const complement = getValue('Complemento') || '';
+    const cityState = getValue('Cidade/UF') || 'São Paulo - SP';
+    const cep = getValue('CEP') || '01000-000';
+
+    let city = 'São Paulo';
+    let state = 'SP';
+    if (cityState.includes('-')) {
+      const parts = cityState.split('-');
+      city = parts[0].trim();
+      state = parts[1].trim();
+    } else if (cityState) {
+      city = cityState.trim();
+    }
+
+    if (!email && !cpf && !name) {
+      return null;
+    }
+
+    const cleanPin = pin.replace(/\D/g, '') || '12345678';
+
+    const user: User = {
+      id: id.startsWith('usr_') ? id : `usr_${id}`,
+      name,
+      email: email || `${name.toLowerCase().replace(/\s+/g, '')}@cliente.com.br`,
+      cpf,
+      phone,
+      pin: cleanPin,
+      password: cleanPin,
+      isAdmin: false,
+      address: {
+        street,
+        number,
+        neighborhood,
+        complement,
+        city,
+        state,
+        cep,
+      },
+    };
+
+    return user;
+  } catch {
+    return null;
+  }
+};
+
+export const downloadUserTxt = (user: User) => {
+  const textContent = `=====================================================
+FICHA DE CADASTRO DE CLIENTE - DROGARIA AMERICANA
+=====================================================
+Data de Emissão: ${new Date().toLocaleString('pt-BR')}
+ID do Cliente: ${user.id}
+Nome Completo: ${user.name}
+CPF: ${user.cpf || 'Não informado'}
+E-mail: ${user.email}
+Telefone/WhatsApp: ${user.phone || 'Não informado'}
+
+ENDEREÇO DE ENTREGA DE MEDICAMENTOS:
+Logradouro: ${user.address?.street || 'N/A'}, Nº: ${user.address?.number || 'S/N'}
+Bairro: ${user.address?.neighborhood || 'N/A'}
+Complemento: ${user.address?.complement || 'N/A'}
+Cidade/UF: ${user.address?.city || 'São Paulo'} - ${user.address?.state || 'SP'}
+CEP: ${user.address?.cep || '01000-000'}
+
+SEGURANÇA & DADOS DE RECOVERY:
+PIN de Segurança (8 Dígitos): ${user.pin || 'Não informado'}
+Termos LGPD: Aceitos
+=====================================================`;
+
+  const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cadastro_cliente_${user.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+export const downloadAllUsersTxt = (users: User[]) => {
+  let fileText = `=====================================================\n`;
+  fileText += `RELATÓRIO GERAL DE CLIENTES CADASTRAIS - DROGARIA AMERICANA\n`;
+  fileText += `Gerado em: ${new Date().toLocaleString('pt-BR')} | Total: ${users.length} Clientes\n`;
+  fileText += `=====================================================\n\n`;
+
+  users.forEach((u, index) => {
+    fileText += `[CLIENTE #${index + 1}]\n`;
+    fileText += `ID: ${u.id}\n`;
+    fileText += `Nome: ${u.name}\n`;
+    fileText += `CPF: ${u.cpf || 'Não informado'}\n`;
+    fileText += `Email: ${u.email}\n`;
+    fileText += `Telefone: ${u.phone || 'Não informado'}\n`;
+    fileText += `Endereço: ${u.address?.street || ''}, ${u.address?.number || ''} - ${u.address?.neighborhood || ''}, ${u.address?.city || ''}\n`;
+    fileText += `-----------------------------------------------------\n\n`;
+  });
+
+  const blob = new Blob([fileText], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cadastros_clientes_drogaria_${Date.now()}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
 interface UserAccountModalProps {
   isOpen: boolean;
@@ -53,7 +221,11 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   // Storage of all registered users locally
   const getRegisteredUsers = (): User[] => {
     const saved = localStorage.getItem('pharma_registered_users');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) {
+      localStorage.setItem('pharma_registered_users', JSON.stringify(DEFAULT_PRESET_USERS));
+      return DEFAULT_PRESET_USERS;
+    }
+    return JSON.parse(saved);
   };
 
   const saveRegisteredUser = (user: User) => {
@@ -184,41 +356,127 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
     saveRegisteredUser(newUser);
     onLogin(newUser);
-    setSuccessMessage('Conta criada com sucesso! Você já está autenticado.');
+    // Download TXT file record for customer
+    try {
+      downloadUserTxt(newUser);
+    } catch {
+      // Ignore if popup blocked
+    }
+    setSuccessMessage('Conta criada com sucesso! O arquivo TXT com seu comprovante de cadastro foi gerado.');
     setActiveTab('profile');
+  };
+
+  const handleTxtFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    clearMessages();
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (!content) {
+        setErrorMessage('O arquivo .TXT selecionado está vazio ou ilegível.');
+        return;
+      }
+
+      const parsedUser = parseUserFromTxt(content);
+      if (!parsedUser) {
+        setErrorMessage(
+          'Não foi possível validar as credenciais neste arquivo .TXT. Verifique se é um arquivo de cadastro válido.'
+        );
+        return;
+      }
+
+      const registered = getRegisteredUsers();
+      const existingIdx = registered.findIndex(
+        (u) =>
+          (u.email && parsedUser.email && u.email.toLowerCase() === parsedUser.email.toLowerCase()) ||
+          (u.cpf && parsedUser.cpf && u.cpf.replace(/\D/g, '') === parsedUser.cpf.replace(/\D/g, ''))
+      );
+
+      if (existingIdx >= 0) {
+        if (registered[existingIdx].password) {
+          parsedUser.password = registered[existingIdx].password;
+        }
+        registered[existingIdx] = { ...registered[existingIdx], ...parsedUser };
+        localStorage.setItem('pharma_registered_users', JSON.stringify(registered));
+      } else {
+        saveRegisteredUser(parsedUser);
+      }
+
+      onLogin(parsedUser);
+      setSuccessMessage(`✅ Autenticado com sucesso via leitura do arquivo .TXT! Bem-vindo(a), ${parsedUser.name}.`);
+      setActiveTab('profile');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleLoadBundledTxt = async () => {
+    clearMessages();
+    try {
+      const res = await fetch('/cadastro_cliente_exemplo.txt');
+      const text = await res.text();
+      const parsedUser = parseUserFromTxt(text);
+      if (!parsedUser) {
+        setErrorMessage('Não foi possível carregar o arquivo .TXT pré-existente no projeto.');
+        return;
+      }
+      const registered = getRegisteredUsers();
+      const existingIdx = registered.findIndex(
+        (u) =>
+          (u.email && parsedUser.email && u.email.toLowerCase() === parsedUser.email.toLowerCase()) ||
+          (u.cpf && parsedUser.cpf && u.cpf.replace(/\D/g, '') === parsedUser.cpf.replace(/\D/g, ''))
+      );
+
+      if (existingIdx >= 0) {
+        if (registered[existingIdx].password) {
+          parsedUser.password = registered[existingIdx].password;
+        }
+        registered[existingIdx] = { ...registered[existingIdx], ...parsedUser };
+        localStorage.setItem('pharma_registered_users', JSON.stringify(registered));
+      } else {
+        saveRegisteredUser(parsedUser);
+      }
+
+      onLogin(parsedUser);
+      setSuccessMessage(`✅ Autenticado com sucesso via arquivo .TXT do projeto! Bem-vindo(a), ${parsedUser.name}.`);
+      setActiveTab('profile');
+    } catch {
+      setErrorMessage('Erro ao ler o arquivo .TXT incluído no projeto.');
+    }
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
 
+    if (!loginIdentifier.trim() || !loginPassword.trim()) {
+      setErrorMessage('Por favor, informe seu E-mail/CPF e sua Senha de acesso.');
+      return;
+    }
+
     const cleanInput = loginIdentifier.trim().toLowerCase();
     const registered = getRegisteredUsers();
 
     const found = registered.find(
-      (u) => u.email.toLowerCase() === cleanInput || u.cpf.replace(/\D/g, '') === cleanInput.replace(/\D/g, '')
+      (u) =>
+        u.email.toLowerCase() === cleanInput ||
+        (u.cpf && u.cpf.replace(/\D/g, '') === cleanInput.replace(/\D/g, ''))
     );
 
     if (found) {
       if (found.password && found.password !== loginPassword) {
-        setErrorMessage('Senha incorreta. Tente novamente ou use a opção "Esqueceu a senha?".');
+        setErrorMessage('Senha incorreta. Verifique seus dados ou clique em "Esqueceu a senha?".');
         return;
       }
       onLogin(found);
       setSuccessMessage(`Bem-vindo de volta, ${found.name}!`);
       setActiveTab('profile');
     } else {
-      const fallbackUser: User = {
-        id: `usr_${Date.now()}`,
-        name: cleanInput.includes('@') ? cleanInput.split('@')[0] : 'Cliente',
-        email: cleanInput.includes('@') ? cleanInput : 'cliente@exemplo.com',
-        cpf: loginIdentifier,
-        password: loginPassword,
-        isAdmin: false,
-      };
-      saveRegisteredUser(fallbackUser);
-      onLogin(fallbackUser);
-      setActiveTab('profile');
+      setErrorMessage(
+        'Nenhum cadastro encontrado para o E-mail ou CPF informado. Por favor, crie sua conta na aba "Cadastrar" para acessar.'
+      );
     }
   };
 
@@ -469,13 +727,24 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                 </div>
               )}
 
-              <button
-                onClick={onLogout}
-                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition flex items-center justify-center gap-2 text-xs"
-              >
-                <LogOut className="w-4 h-4 text-slate-500" />
-                <span>Sair da Conta</span>
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => downloadUserTxt(currentUser)}
+                  className="flex-1 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-2xl transition flex items-center justify-center gap-2 text-xs border border-rose-200"
+                >
+                  <Download className="w-4 h-4 text-rose-600" />
+                  <span>Baixar Comprovante de Cadastro (.TXT)</span>
+                </button>
+
+                <button
+                  onClick={onLogout}
+                  className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition flex items-center justify-center gap-2 text-xs"
+                >
+                  <LogOut className="w-4 h-4 text-slate-500" />
+                  <span>Sair da Conta</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -694,6 +963,61 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                     <LogIn className="w-4 h-4" />
                     <span>Entrar na Minha Conta</span>
                   </button>
+
+                  <div className="pt-2 border-t border-slate-200">
+                    <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl space-y-2.5">
+                      <div className="flex items-center justify-between text-rose-700 font-extrabold text-xs">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>Autenticação via Arquivo .TXT</span>
+                        </div>
+                        <span className="text-[10px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">
+                          Segurança Local
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                        Você pode usar o arquivo <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800 font-mono text-[10px]">.txt</code> de cadastro pré-instalado no projeto para entrar instantaneamente ou carregar seu próprio arquivo.
+                      </p>
+
+                      <div className="flex flex-col gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleLoadBundledTxt}
+                          className="flex items-center justify-center gap-2 w-full py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition shadow-sm active:scale-98"
+                        >
+                          <FileText className="w-4 h-4 text-rose-200" />
+                          <span>⚡ Entrar com .TXT do Projeto (Exemplo)</span>
+                        </button>
+
+                        <div className="flex items-center gap-2 my-0.5">
+                          <div className="flex-1 h-px bg-slate-200" />
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">ou</span>
+                          <div className="flex-1 h-px bg-slate-200" />
+                        </div>
+
+                        <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-2 px-3 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 rounded-xl font-bold text-xs transition shadow-xs active:scale-98">
+                          <Upload className="w-4 h-4 text-rose-600" />
+                          <span>📂 Carregar Arquivo .TXT do seu Dispositivo</span>
+                          <input
+                            type="file"
+                            accept=".txt"
+                            onChange={handleTxtFileUpload}
+                            className="hidden"
+                          />
+                        </label>
+
+                        <a
+                          href="/cadastro_cliente_exemplo.txt"
+                          download="cadastro_cliente_exemplo.txt"
+                          className="text-[11px] text-slate-500 hover:text-rose-600 text-center font-bold flex items-center justify-center gap-1 pt-1 transition"
+                        >
+                          <Download className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Baixar cópia do arquivo cadastro_cliente_exemplo.txt</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
                 </form>
               ) : (
                 /* INLINE RECOVERY VIEW INSIDE ENTRAR */

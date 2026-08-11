@@ -213,47 +213,91 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
 
             {/* Customer & Address Details */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
               <div className="flex items-center gap-2 text-rose-600 font-extrabold text-xs border-b border-slate-200 pb-1.5">
                 <MapPin className="w-4 h-4" />
-                <span>Dados de Entrega & Cliente</span>
+                <span>Detalhamento do Cliente & Endereço</span>
               </div>
-              <div>
-                <span className="text-slate-400 block font-medium">Cliente:</span>
-                <strong className="text-slate-900">{currentUser?.name || 'Cliente'} ({currentUser?.cpf || 'CPF não informado'})</strong>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Cliente Responsável:</span>
+                  <strong className="text-slate-900 font-extrabold">{currentUser?.name || 'Cliente'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">CPF do Titular:</span>
+                  <strong className="text-slate-900 font-extrabold">{currentUser?.cpf || 'Não informado'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">E-mail de Notificação:</span>
+                  <strong className="text-slate-800 font-medium truncate block">{currentUser?.email || 'N/A'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Telefone / WhatsApp:</span>
+                  <strong className="text-slate-900 font-extrabold">{currentUser?.phone || 'Não informado'}</strong>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400 block font-medium">Endereço de Entrega:</span>
-                <strong className="text-slate-900">
+
+              <div className="pt-2 border-t border-slate-200">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Local de Entrega / Retirada:</span>
+                <strong className="text-slate-900 block mt-0.5 leading-relaxed">
                   {deliveryType === 'delivery'
                     ? currentUser?.address
-                      ? `${currentUser.address.street}, ${currentUser.address.number} - ${currentUser.address.neighborhood}, ${currentUser.address.city}`
-                      : 'Entrega no endereço cadastrado'
-                    : 'Retirada presencial na Farmácia'}
+                      ? `${currentUser.address.street}, Nº ${currentUser.address.number}${currentUser.address.complement ? ` (${currentUser.address.complement})` : ''} - Bairro: ${currentUser.address.neighborhood}, ${currentUser.address.city}/${currentUser.address.state} (CEP: ${currentUser.address.cep})`
+                      : 'Entrega a Domicílio no endereço de cadastro'
+                    : '🏪 Retirada Presencial na Loja (Balcão de Atendimento)'}
                 </strong>
               </div>
             </div>
 
             {/* Payment Summary */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
               <div className="flex items-center gap-2 text-rose-600 font-extrabold text-xs border-b border-slate-200 pb-1.5">
                 <CreditCard className="w-4 h-4" />
-                <span>Forma de Pagamento Selecionada</span>
+                <span>Forma de Pagamento & Condições</span>
               </div>
-              <p className="text-slate-800 font-bold text-xs">{getPaymentLabel()}</p>
+              <p className="text-slate-900 font-extrabold text-xs">{getPaymentLabel()}</p>
+              {paymentMethod === 'cash' && needChange && (
+                <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-900 font-bold text-[11px] flex items-center justify-between">
+                  <span>Troco Solicitado para: <strong>R$ {parsedBanknote.toFixed(2).replace('.', ',')}</strong></span>
+                  <span className="text-rose-700 font-black font-mono">Troco levar: R$ {calculatedTroco.toFixed(2).replace('.', ',')}</span>
+                </div>
+              )}
             </div>
 
-            {/* Items Summary */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800 border-b border-slate-200 pb-1.5">
-                <span>Itens do Pedido ({items.length})</span>
-                <span>Valor Total</span>
+            {/* Receita Médica Status */}
+            {hasControlledItems && (
+              <div className="bg-rose-50 p-3 rounded-2xl border border-rose-200 text-rose-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-rose-800">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  <span>Retenção de Receita Médica Requerida</span>
+                </div>
+                <p className="text-[11px] text-rose-700 font-medium">
+                  {prescriptionFile
+                    ? `Anexada com sucesso: ${prescriptionFile.fileName}`
+                    : 'Apresentação obrigatória da receita física ao entregador no ato do recebimento.'}
+                </p>
               </div>
-              <div className="space-y-1.5 pt-1">
+            )}
+
+            {/* Items Detailed List */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-800 border-b border-slate-200 pb-1.5">
+                <span>Relação dos Produtos do Pedido ({items.length})</span>
+                <span>Subtotal</span>
+              </div>
+              <div className="space-y-2 pt-1 divide-y divide-slate-100">
                 {items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-slate-700">
-                    <span className="truncate pr-2">{item.quantity}x {item.product.name}</span>
-                    <span className="font-mono text-slate-900 font-bold">
+                  <div key={idx} className="pt-1.5 flex justify-between items-start text-slate-700">
+                    <div className="min-w-0 pr-2">
+                      <strong className="text-slate-900 block truncate">{item.quantity}x {item.product.name}</strong>
+                      {item.product.dosage && (
+                        <span className="text-[10px] text-slate-400 block">{item.product.dosage}</span>
+                      )}
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        (R$ {item.product.price.toFixed(2).replace('.', ',')} cada)
+                      </span>
+                    </div>
+                    <span className="font-mono text-slate-900 font-black shrink-0">
                       R$ {(item.product.price * item.quantity).toFixed(2).replace('.', ',')}
                     </span>
                   </div>

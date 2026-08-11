@@ -143,6 +143,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                     R$ {product.price.toFixed(2).replace('.', ',')}
                   </span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddToCart(product, e);
+                  }}
+                  className="bg-rose-600 hover:bg-rose-700 text-white p-2.5 sm:px-3 sm:py-2 rounded-2xl font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-90 transition shrink-0 z-10"
+                  title="Adicionar ao carrinho"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Adicionar</span>
+                </button>
               </div>
             </>
           ) : (

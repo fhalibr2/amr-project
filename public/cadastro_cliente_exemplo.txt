@@ -1,0 +1,21 @@
+=====================================================
+FICHA DE CADASTRO DE CLIENTE - DROGARIA AMERICANA
+=====================================================
+Data de Emissão: 11/08/2026 10:00:00
+ID do Cliente: usr_1001
+Nome Completo: Carlos Eduardo Silva
+CPF: 123.456.789-00
+E-mail: carlos.silva@email.com
+Telefone/WhatsApp: (11) 98765-4321
+
+ENDEREÇO DE ENTREGA DE MEDICAMENTOS:
+Logradouro: Avenida Paulista, Nº: 1500
+Bairro: Bela Vista
+Complemento: Apto 42 - Bloco B
+Cidade/UF: São Paulo - SP
+CEP: 01310-200
+
+SEGURANÇA & DADOS DE RECOVERY:
+PIN de Segurança (8 Dígitos): 12345678
+Termos LGPD: Aceitos
+=====================================================

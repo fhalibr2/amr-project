@@ -203,6 +203,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             </p>
           </div>
 
+          <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-amber-900 text-[11px] font-bold flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Atenção: É necessário estar logado ou cadastrado para finalizar o pedido com segurança.</span>
+          </div>
+
           <button
             onClick={onProceedToCheckout}
             className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-98 transition"

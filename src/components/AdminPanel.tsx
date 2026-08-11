@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Product, Category, Order, PrescriptionType, StoreSettings } from '../types';
+import { Product, Category, Order, PrescriptionType, StoreSettings, User } from '../types';
 import { MedicineBoxSvg } from './MedicineBoxSvg';
 import { soundManager } from '../utils/soundEffects';
 import { DIDACTIC_MEDICINES, INITIAL_LABORATORIES } from '../data/didacticDatabase';
@@ -148,6 +148,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Thermal Receipt Printing Slip Modal State (80mm / 58mm)
   const [thermalPrintOrder, setThermalPrintOrder] = useState<Order | null>(null);
+
+  // Customer Registrations TXT Export Handler
+  const handleExportUsersTxt = () => {
+    const saved = localStorage.getItem('pharma_registered_users');
+    const users: User[] = saved ? JSON.parse(saved) : [];
+    if (users.length === 0) {
+      alert('Nenhum cadastro de cliente registrado no banco de dados local.');
+      return;
+    }
+    let fileText = `=====================================================\n`;
+    fileText += `RELATÓRIO GERAL DE CADASTROS DE CLIENTES - DROGARIA AMERICANA\n`;
+    fileText += `Data de Emissão: ${new Date().toLocaleString('pt-BR')} | Total: ${users.length} Clientes\n`;
+    fileText += `=====================================================\n\n`;
+
+    users.forEach((u, index) => {
+      fileText += `[CLIENTE #${index + 1}]\n`;
+      fileText += `ID: ${u.id}\n`;
+      fileText += `Nome: ${u.name}\n`;
+      fileText += `CPF: ${u.cpf || 'Não informado'}\n`;
+      fileText += `E-mail: ${u.email}\n`;
+      fileText += `Telefone: ${u.phone || 'Não informado'}\n`;
+      fileText += `Endereço: ${u.address?.street || ''}, Nº ${u.address?.number || ''}${u.address?.complement ? ` (${u.address.complement})` : ''} - Bairro: ${u.address?.neighborhood || ''}, ${u.address?.city || ''}/${u.address?.state || ''} (CEP: ${u.address?.cep || ''})\n`;
+      fileText += `-----------------------------------------------------\n\n`;
+    });
+
+    const blob = new Blob([fileText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cadastros_clientes_drogaria_${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Autonomous AI Product Description Generator
+  const handleGenerateAutoDescription = () => {
+    const pName = productForm.name || 'Medicamento / Produto de Saúde';
+    const active = productForm.activeIngredient || '';
+    const brand = productForm.brand || productForm.laboratory || productForm.manufacturer || 'Laboratório Farmacêutico';
+    const isGen = productForm.isGeneric ? ' (Medicamento Genérico)' : '';
+    const pres =
+      productForm.prescriptionType === 'black'
+        ? 'Tarja Preta (Uso sob estrito controle e retenção de receita B1/B2).'
+        : productForm.prescriptionType === 'red_retention'
+        ? 'Tarja Vermelha (Venda sob prescrição médica e retenção da receita).'
+        : productForm.prescriptionType === 'red'
+        ? 'Tarja Vermelha (Venda sob prescrição médica).'
+        : 'Medicamento Isento de Prescrição (MIP / Livre Venda).';
+
+    let desc = `INDICAÇÃO E FINALIDADE:\n${pName}${isGen} da ${brand} é indicado para auxílio, prevenção e tratamento sintomático conforme sua indicação terapêutica oficial.`;
+    if (active) {
+      desc += `\n\nPRINCÍPIO ATIVO / COMPOSIÇÃO:\nContém ${active}.`;
+    }
+    desc += `\n\nPOSOLOGIA E MODO DE USAR:\nUso adulto/pediátrico conforme orientação expressa na bula ou recomendações médicas/farmacêuticas.`;
+    desc += `\n\nCLASSIFICAÇÃO DE VENDA:\n${pres}`;
+    desc += `\n\nPRECAUÇÕES E CUIDADOS:\nConservar em local seco, fresco (15°C a 30°C) e ao abrigo da luz solar direta. Mantenha fora do alcance das crianças. Em caso de reações adversas, descontinue o uso e consulte o médico ou farmacêutico.`;
+    if (productForm.ms && productForm.ms !== 'ISENTO') {
+      desc += `\n\nREGISTRO MINISTÉRIO DA SAÚDE (MS):\n${productForm.ms}`;
+    }
+
+    setProductForm((prev) => ({ ...prev, description: desc }));
+  };
 
   // Import Modal & Post-Import Review Queue State
   const [importText, setImportText] = useState('');
@@ -628,6 +692,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Customer Registrations TXT Export Button */}
+          <button
+            onClick={handleExportUsersTxt}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 transition"
+            title="Exportar arquivo TXT com todos os cadastros de clientes"
+          >
+            <FileText className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">Cadastros (.TXT)</span>
+          </button>
+
           {/* Database Backup & Export Button */}
           <button
             onClick={handleExportDatabase}
@@ -2622,13 +2696,24 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Descrição</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700 text-xs">Descrição do Produto</label>
+                <button
+                  type="button"
+                  onClick={handleGenerateAutoDescription}
+                  className="px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold rounded-lg text-[10px] shadow-xs flex items-center gap-1 transition active:scale-95"
+                  title="Gerar texto de bula/descrição farmacêutica completo baseado nos dados do produto"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>Gerar Descrição Automática por IA</span>
+                </button>
+              </div>
               <textarea
-                rows={2}
+                rows={4}
                 value={productForm.description || ''}
                 onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
                 placeholder="Indicações, modo de usar, posologia..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 outline-none focus:border-rose-600 text-xs"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 outline-none focus:border-rose-600 text-xs font-medium leading-relaxed"
               />
             </div>
 
