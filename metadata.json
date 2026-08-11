@@ -1,0 +1,6 @@
+{
+  "name": "Drogaria Americana",
+  "description": "Aplicativo moderno de farmácia com entrega rápida, consulta inteligente de medicamentos e painel administrativo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
