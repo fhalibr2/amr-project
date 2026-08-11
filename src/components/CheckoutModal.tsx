@@ -19,6 +19,7 @@ import {
   File,
   Trash2,
   AlertTriangle,
+  Eye,
 } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -41,6 +42,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [changeAmount, setChangeAmount] = useState('');
   const [prescriptionFile, setPrescriptionFile] = useState<PrescriptionFile | null>(null);
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   // Check if cart contains controlled items requiring prescription
   const controlledItems = items.filter(
@@ -405,16 +407,33 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
 
                 {deliveryType === 'delivery' ? (
-                  <div className="bg-rose-50/70 border-2 border-dashed border-rose-300 rounded-2xl p-4 space-y-3">
+                  <div className="bg-rose-50/80 border-2 border-dashed border-rose-300 rounded-2xl p-4 space-y-3">
                     <div className="text-xs text-rose-950 font-medium leading-relaxed">
-                      Seu carrinho contém <strong>{controlledItems.length} medicamento(s) sujeito(s) a retenção de receita</strong>. Para entrega em domicílio, anexe a foto ou PDF da receita médica para validação farmacêutica.
+                      Seu pedido inclui <strong>{controlledItems.length} medicamento(s) sob controle especial (Tarja Preta / Vermelha com retenção)</strong>:
+                      <ul className="mt-1.5 space-y-1 bg-white/80 p-2.5 rounded-xl border border-rose-200 font-bold text-[11px] text-slate-800">
+                        {controlledItems.map((ci, idx) => (
+                          <li key={idx} className="flex items-center justify-between gap-2">
+                            <span className="truncate">• {ci.product.name}</span>
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black shrink-0 ${
+                              ci.product.prescriptionType === 'black'
+                                ? 'bg-slate-900 text-rose-300 border border-slate-700'
+                                : 'bg-rose-100 text-rose-900 border border-rose-300'
+                            }`}>
+                              {ci.product.prescriptionType === 'black' ? 'Tarja Preta' : 'Tarja Vermelha c/ Retenção'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 text-[11px] text-rose-900 font-bold">
+                        ⚠️ De acordo com a ANVISA, tire uma foto legível ou envie o arquivo PDF da receita médica para validação farmacêutica.
+                      </p>
                     </div>
 
                     {!prescriptionFile ? (
                       <div>
-                        <label className="cursor-pointer bg-white hover:bg-rose-100/50 border border-rose-300 text-rose-800 font-extrabold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition shadow-xs active:scale-98">
-                          <Upload className="w-4 h-4 text-rose-600" />
-                          <span>Selecionar Foto ou PDF da Receita</span>
+                        <label className="cursor-pointer bg-white hover:bg-rose-100/50 border-2 border-rose-400 text-rose-900 font-extrabold text-xs py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition shadow-sm active:scale-98">
+                          <Upload className="w-5 h-5 text-rose-600" />
+                          <span>Anexar Foto da Receita ou Documento PDF</span>
                           <input
                             type="file"
                             accept="image/*,.pdf"
@@ -423,35 +442,57 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           />
                         </label>
                         <p className="text-[10px] text-slate-500 text-center mt-1.5 font-medium">
-                          Aceita imagem da galeria (JPG/PNG) ou documento em PDF (Até 15MB)
+                          Garante envio seguro da foto da receita médica ou PDF (Máx. 15MB)
                         </p>
                       </div>
                     ) : (
-                      <div className="bg-white p-3 rounded-xl border border-rose-300 flex items-center justify-between gap-2 shadow-xs">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          {prescriptionFile.fileType.includes('pdf') ? (
-                            <File className="w-6 h-6 text-red-600 shrink-0" />
-                          ) : (
-                            <FileText className="w-6 h-6 text-blue-600 shrink-0" />
-                          )}
-                          <div className="truncate">
-                            <span className="font-extrabold text-slate-900 text-xs block truncate">
-                              {prescriptionFile.fileName}
-                            </span>
-                            <span className="text-[10px] text-emerald-700 font-bold block">
-                              ✓ Receita Anexada com Sucesso
-                            </span>
+                      <div className="bg-white p-3.5 rounded-2xl border-2 border-emerald-300 shadow-xs space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {prescriptionFile.dataUrl.startsWith('data:image') || prescriptionFile.fileType.includes('image') ? (
+                              <img
+                                src={prescriptionFile.dataUrl}
+                                alt="Miniatura da Receita"
+                                className="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl border border-red-200 flex items-center justify-center shrink-0 font-bold text-[10px]">
+                                <File className="w-6 h-6 text-red-600" />
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <span className="font-extrabold text-slate-900 text-xs block truncate">
+                                {prescriptionFile.fileName}
+                              </span>
+                              <span className="text-[10px] text-emerald-700 font-extrabold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Receita Anexada com Sucesso
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setShowPreviewModal(true)}
+                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-[11px] rounded-lg border border-rose-200 flex items-center gap-1 transition"
+                              title="Visualizar Receita Anexada"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Ver</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setPrescriptionFile(null)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                              title="Remover e anexar outra"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setPrescriptionFile(null)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Remover receita"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
                     )}
                   </div>
@@ -613,6 +654,56 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </form>
         )}
       </div>
+
+      {/* PRESCRIPTION PREVIEW MODAL FOR USER */}
+      {showPreviewModal && prescriptionFile && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 text-white rounded-3xl max-w-lg w-full p-5 space-y-4 border border-slate-700 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+                <Eye className="w-4 h-4 text-rose-500" />
+                <span>Prévia da Receita Anexada</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-2 rounded-2xl flex items-center justify-center max-h-[60vh] overflow-auto">
+              {prescriptionFile.dataUrl.startsWith('data:image') || prescriptionFile.fileType.includes('image') ? (
+                <img
+                  src={prescriptionFile.dataUrl}
+                  alt="Foto da Receita"
+                  className="max-w-full max-h-[50vh] object-contain rounded-xl"
+                />
+              ) : (
+                <iframe
+                  src={prescriptionFile.dataUrl}
+                  className="w-full h-80 bg-white rounded-xl"
+                  title="PDF Receita"
+                />
+              )}
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              <span className="text-[11px] text-slate-400 truncate max-w-[200px]">
+                {prescriptionFile.fileName}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -18,6 +18,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   showStockToCustomer: false,
   soundEnabled: true,
   autoRefreshInterval: 60,
+  adminUsername: 'admin',
+  adminPassword: 'admin123',
 };
 
 export const INITIAL_CATEGORIES: Category[] = [

@@ -5,12 +5,16 @@ interface AdminLoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLoginSuccess: () => void;
+  adminPassword?: string;
+  adminUsername?: string;
 }
 
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   isOpen,
   onClose,
   onLoginSuccess,
+  adminPassword = 'admin123',
+  adminUsername = 'admin',
 }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -22,11 +26,14 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     e.preventDefault();
     setError('');
 
-    if (username.trim().toLowerCase() === 'admin' && password === 'admin123') {
+    const targetUser = adminUsername.trim().toLowerCase();
+    const targetPass = adminPassword.trim();
+
+    if (username.trim().toLowerCase() === targetUser && password.trim() === targetPass) {
       onLoginSuccess();
       onClose();
     } else {
-      setError('Usuário ou senha de Administrador incorretos. Tente admin / admin123');
+      setError('Usuário ou senha de Administrador incorretos. Verifique as credenciais personalizadas.');
     }
   };
 
@@ -57,7 +64,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl text-xs text-amber-900 flex items-start gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <span>
-              Você desbloqueou o acesso administrativo oculto. Digite suas credenciais para gerenciar a loja. (Padrão: <strong>admin</strong> / <strong>admin123</strong>)
+              Você desbloqueou o acesso administrativo oculto. Digite suas credenciais cadastradas para gerenciar a loja. (Padrão inicial: <strong>admin</strong> / <strong>admin123</strong>)
             </span>
           </div>
 
@@ -74,7 +81,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Digite 'admin'"
+              placeholder="Digite o usuário admin (ex: admin)"
               required
               className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-rose-600 focus:ring-2 focus:ring-rose-100 text-sm font-medium outline-none transition"
             />
@@ -86,7 +93,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Digite 'admin123'"
+              placeholder="Sua senha de acesso"
               required
               className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-rose-600 focus:ring-2 focus:ring-rose-100 text-sm font-medium outline-none transition"
             />
@@ -94,7 +101,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
 
           <button
             type="submit"
-            className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-2xl shadow-lg shadow-rose-600/20 active:scale-98 transition text-sm flex items-center justify-center gap-2"
+            className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-2xl shadow-lg shadow-rose-600/20 active:scale-98 transition text-sm flex items-center justify-center gap-2 cursor-pointer"
           >
             <KeyRound className="w-4 h-4" />
             <span>Entrar no Painel Admin</span>

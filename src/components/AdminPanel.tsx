@@ -3,6 +3,7 @@ import { Product, Category, Order, PrescriptionType, StoreSettings, User } from 
 import { MedicineBoxSvg } from './MedicineBoxSvg';
 import { soundManager } from '../utils/soundEffects';
 import { DIDACTIC_MEDICINES, INITIAL_LABORATORIES } from '../data/didacticDatabase';
+import { isOfferActive, getOfferStatusDetails } from '../utils/offerUtils';
 import { SplashScreen } from './SplashScreen';
 import {
   Plus,
@@ -33,6 +34,8 @@ import {
   Phone,
   Store,
   Eye,
+  EyeOff,
+  KeyRound,
   Search,
   Upload,
   Download,
@@ -46,6 +49,7 @@ import {
   Banknote,
   Minus,
   Building2,
+  Zap,
   BookOpen,
   Clock,
   ShieldCheck,
@@ -129,11 +133,249 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Search & Filter state for Products Tab
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState<'all' | 'medicamentos' | 'perfumaria' | 'genericos' | 'incomplete'>('all');
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState<'all' | 'medicamentos' | 'perfumaria' | 'perfumaria_no_image' | 'genericos' | 'incomplete' | 'unpriced'>('all');
+
+  // Intelligent Laboratory Assimilation & Automatic Registration
+  const matchAndAssimilateLaboratory = (rawName: string): string => {
+    if (!rawName || !rawName.trim()) return '';
+    const trimmed = rawName.trim();
+
+    const simplify = (str: string) =>
+      str
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\b(s\.?a\.?|s\/a|ltda\.?|laboratorio[s]?|farmaceutica[s]?|labs?|industria[s]?)\b/gi, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+
+    const normTarget = simplify(trimmed);
+    if (!normTarget) return trimmed;
+
+    // Search in existing registered laboratories list
+    const existingMatch = laboratories.find((lab) => {
+      const normLab = simplify(lab);
+      return (
+        normLab === normTarget ||
+        (normLab.length >= 3 && normTarget.includes(normLab)) ||
+        (normTarget.length >= 3 && normLab.includes(normTarget))
+      );
+    });
+
+    if (existingMatch) {
+      return existingMatch; // Assimilated to existing laboratory!
+    }
+
+    // No existing laboratory match -> Automatically register this new laboratory!
+    const formattedLab = trimmed
+      .replace(/\s+/g, ' ')
+      .split(' ')
+      .map((w) => (w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toUpperCase()))
+      .join(' ');
+
+    handleAddLaboratory(formattedLab);
+    return formattedLab;
+  };
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock' | 'controlled'>('all');
 
   // Product View Mode State
   const [productViewMode, setProductViewMode] = useState<'grid_large' | 'grid_compact' | 'table'>('grid_large');
+
+  // Mass Selection & Mass Maintenance State
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [isMassEditOpen, setIsMassEditOpen] = useState(false);
+  const [massEditTab, setMassEditTab] = useState<'prices' | 'offers' | 'stock' | 'category' | 'lab' | 'status'>('prices');
+
+  // Mass Edit Form States
+  const [massPriceType, setMassPriceType] = useState<'fixed' | 'discount_percent' | 'increase_percent'>('fixed');
+  const [massPriceValue, setMassPriceValue] = useState<string>('');
+
+  const [massOfferAction, setMassOfferAction] = useState<'enable' | 'disable' | 'dates_only'>('enable');
+  const [massOfferTag, setMassOfferTag] = useState<string>('');
+  const [massOfferStartDate, setMassOfferStartDate] = useState<string>('');
+  const [massOfferEndDate, setMassOfferEndDate] = useState<string>('');
+
+  const [massStockType, setMassStockType] = useState<'fixed' | 'add' | 'subtract'>('fixed');
+  const [massStockValue, setMassStockValue] = useState<string>('');
+
+  const [massCategory, setMassCategory] = useState<string>('');
+  const [massPrescription, setMassPrescription] = useState<string>('');
+  const [massGeneric, setMassGeneric] = useState<string>(''); // 'keep' | 'yes' | 'no'
+
+  const [massLab, setMassLab] = useState<string>('');
+
+  const toggleSelectProduct = (id: number) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllVisible = (filteredList: Product[]) => {
+    const visibleIds = filteredList.map((p) => p.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedProductIds.includes(id));
+    if (allSelected) {
+      setSelectedProductIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      const newSet = new Set([...selectedProductIds, ...visibleIds]);
+      setSelectedProductIds(Array.from(newSet));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedProductIds([]);
+  };
+
+  const handleApplyMassPrice = () => {
+    const val = parseFloat(massPriceValue);
+    if (isNaN(val) || val < 0) {
+      alert('Por favor, informe um valor numérico válido.');
+      return;
+    }
+
+    let count = 0;
+    products.forEach((p) => {
+      if (selectedProductIds.includes(p.id)) {
+        let newPrice = p.price;
+        if (massPriceType === 'fixed') {
+          newPrice = val;
+        } else if (massPriceType === 'discount_percent') {
+          newPrice = Math.max(0, p.price * (1 - val / 100));
+        } else if (massPriceType === 'increase_percent') {
+          newPrice = p.price * (1 + val / 100);
+        }
+        onUpdateProduct({ ...p, price: Number(newPrice.toFixed(2)) });
+        count++;
+      }
+    });
+
+    soundManager.playBeepSuccess();
+    alert(`✓ Preços reajustados para ${count} produto(s)!`);
+    setIsMassEditOpen(false);
+  };
+
+  const handleApplyMassOffer = () => {
+    let count = 0;
+    products.forEach((p) => {
+      if (selectedProductIds.includes(p.id)) {
+        let updated: Product = { ...p };
+        if (massOfferAction === 'enable') {
+          updated.isOffer = true;
+          if (massOfferTag) updated.offerTag = massOfferTag;
+          if (massOfferStartDate) updated.offerStartDate = massOfferStartDate;
+          if (massOfferEndDate) updated.offerEndDate = massOfferEndDate;
+        } else if (massOfferAction === 'disable') {
+          updated.isOffer = false;
+        } else if (massOfferAction === 'dates_only') {
+          if (massOfferStartDate) updated.offerStartDate = massOfferStartDate;
+          if (massOfferEndDate) updated.offerEndDate = massOfferEndDate;
+        }
+        onUpdateProduct(updated);
+        count++;
+      }
+    });
+
+    soundManager.playBeepSuccess();
+    alert(`✓ Configuração de oferta atualizada para ${count} produto(s)!`);
+    setIsMassEditOpen(false);
+  };
+
+  const handleApplyMassStock = () => {
+    const val = parseInt(massStockValue);
+    if (isNaN(val)) {
+      alert('Por favor, informe uma quantidade numérica válida.');
+      return;
+    }
+
+    let count = 0;
+    products.forEach((p) => {
+      if (selectedProductIds.includes(p.id)) {
+        let newStock = p.stock;
+        if (massStockType === 'fixed') {
+          newStock = Math.max(0, val);
+        } else if (massStockType === 'add') {
+          newStock = Math.max(0, p.stock + val);
+        } else if (massStockType === 'subtract') {
+          newStock = Math.max(0, p.stock - val);
+        }
+        onUpdateProduct({ ...p, stock: newStock });
+        count++;
+      }
+    });
+
+    soundManager.playBeepSuccess();
+    alert(`✓ Estoque atualizado para ${count} produto(s)!`);
+    setIsMassEditOpen(false);
+  };
+
+  const handleApplyMassCategory = () => {
+    if (!massCategory && !massPrescription && !massGeneric) {
+      alert('Selecione ao menos um campo para alterar.');
+      return;
+    }
+
+    let count = 0;
+    products.forEach((p) => {
+      if (selectedProductIds.includes(p.id)) {
+        let updated = { ...p };
+        if (massCategory) updated.category = massCategory;
+        if (massPrescription) updated.prescriptionType = massPrescription as PrescriptionType;
+        if (massGeneric === 'yes') updated.isGeneric = true;
+        if (massGeneric === 'no') updated.isGeneric = false;
+        onUpdateProduct(updated);
+        count++;
+      }
+    });
+
+    soundManager.playBeepSuccess();
+    alert(`✓ Categoria/Classificação atualizada para ${count} produto(s)!`);
+    setIsMassEditOpen(false);
+  };
+
+  const handleApplyMassLab = () => {
+    if (!massLab.trim()) {
+      alert('Informe o nome do laboratório/fabricante.');
+      return;
+    }
+    const finalLab = matchAndAssimilateLaboratory(massLab);
+
+    let count = 0;
+    products.forEach((p) => {
+      if (selectedProductIds.includes(p.id)) {
+        onUpdateProduct({
+          ...p,
+          laboratory: finalLab,
+          manufacturer: finalLab,
+          brand: finalLab,
+        });
+        count++;
+      }
+    });
+
+    soundManager.playBeepSuccess();
+    alert(`✓ Laboratório "${finalLab}" atribuído a ${count} produto(s)!`);
+    setIsMassEditOpen(false);
+  };
+
+  const handleMassToggleStatus = (active: boolean) => {
+    let count = 0;
+    products.forEach((p) => {
+      if (selectedProductIds.includes(p.id)) {
+        onUpdateProduct({ ...p, isActive: active });
+        count++;
+      }
+    });
+    soundManager.playBeepSuccess();
+    alert(`✓ ${count} produto(s) ${active ? 'ativados' : 'desativados'} com sucesso!`);
+    setIsMassEditOpen(false);
+  };
+
+  const handleMassDelete = () => {
+    if (!confirm(`⚠️ ATENÇÃO: Tem certeza que deseja EXCLUIR DEFINITIVAMENTE os ${selectedProductIds.length} produtos selecionados? Esta ação não pode ser desfeita.`)) return;
+    selectedProductIds.forEach((id) => onDeleteProduct(id));
+    setSelectedProductIds([]);
+    setIsMassEditOpen(false);
+    alert('✓ Produtos excluídos com sucesso!');
+  };
 
   // Splash Screen Preview Simulator State
   const [showSplashPreview, setShowSplashPreview] = useState(false);
@@ -244,6 +486,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
 
   const [newAnnouncementInput, setNewAnnouncementInput] = useState('');
+  const [showAdminPass, setShowAdminPass] = useState(false);
 
   // Auto-cancel pending orders older than 24h
   useEffect(() => {
@@ -558,28 +801,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     reader.readAsText(file);
   };
 
-  // CSV / TXT Parser
+  // CSV / TXT Parser - Preserves raw imported fields & assimilates/registers laboratories
   const handleParseImportText = (text: string) => {
     const lines = text.split('\n').filter((l) => l.trim().length > 0);
     const newItems: Partial<Product>[] = [];
 
     lines.forEach((line) => {
-      // Split by semicolon or comma or tab
+      // Split by semicolon, comma or tab
       const cols = line.split(/[;\t,]/).map((c) => c.trim().replace(/^["']|["']$/g, ''));
-      if (cols.length < 2) return;
+      if (cols.length < 1) return;
 
-      const name = cols[0];
-      const ean = cols[1] || '7891234567890';
-      const price = parseFloat(cols[2]?.replace('R$', '').replace(',', '.')) || 19.9;
-      const stock = parseInt(cols[3]) || 50;
-      const pmcPrice = parseFloat(cols[4]?.replace('R$', '').replace(',', '.')) || price * 1.25;
-      const activeIngredient = cols[5] || '';
-      const manufacturer = cols[6] || '';
-      const description = cols[7] || '';
-
-      if (name.toLowerCase().includes('nome') || name.toLowerCase().includes('descrição')) {
-        return; // skip header row
+      const name = cols[0] || '';
+      if (!name || name.toLowerCase().includes('nome') || name.toLowerCase().includes('descrição') || name.toLowerCase().includes('produto')) {
+        return; // skip header or empty row
       }
+
+      const ean = cols[1] && cols[1] !== '7891234567890' ? cols[1] : (cols[1] || '');
+
+      // Parse price without inventing false defaults. If missing, price = 0
+      const rawPriceStr = cols[2]?.replace('R$', '').replace(/\./g, '').replace(',', '.');
+      const rawPrice = rawPriceStr ? parseFloat(rawPriceStr) : NaN;
+      const price = !isNaN(rawPrice) && rawPrice >= 0 ? rawPrice : 0;
+
+      // Parse stock. Default to 0 if not provided
+      const rawStock = cols[3] ? parseInt(cols[3]) : NaN;
+      const stock = !isNaN(rawStock) && rawStock >= 0 ? rawStock : 0;
+
+      // Parse PMC price
+      const rawPmcStr = cols[4]?.replace('R$', '').replace(/\./g, '').replace(',', '.');
+      const rawPmc = rawPmcStr ? parseFloat(rawPmcStr) : NaN;
+      const pmcPrice = !isNaN(rawPmc) && rawPmc >= 0 ? rawPmc : (price > 0 ? price * 1.25 : 0);
+
+      const activeIngredient = cols[5] || '';
+      const rawManufacturer = cols[6] || '';
+      const description = cols[7] || '';
+      const ms = cols[8] || '';
+
+      // Intelligent Laboratory Assimilation & Automatic Registration
+      const manufacturer = rawManufacturer ? matchAndAssimilateLaboratory(rawManufacturer) : '';
 
       newItems.push({
         name,
@@ -590,10 +849,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         originalPrice: pmcPrice,
         activeIngredient,
         manufacturer,
+        brand: manufacturer,
         description,
         category: 'medicamentos',
         prescriptionType: 'none',
-        ms: '',
+        ms,
         image: '',
         isActive: true,
       });
@@ -621,23 +881,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleSaveQueueItem = (itemIdx: number, finalProduct: Partial<Product>) => {
-    if (!finalProduct.name || !finalProduct.price) return;
+    if (!finalProduct.name) return;
+
+    // Assimilate or auto-register lab if manufacturer or brand is filled
+    const lab = finalProduct.manufacturer || finalProduct.brand
+      ? matchAndAssimilateLaboratory(finalProduct.manufacturer || finalProduct.brand || '')
+      : '';
+
+    const finalPrice = finalProduct.price !== undefined && !isNaN(finalProduct.price) ? finalProduct.price : 0;
+
     onAddProduct({
       name: finalProduct.name,
-      brand: finalProduct.brand || finalProduct.manufacturer || '',
+      brand: lab || finalProduct.brand || '',
       category: finalProduct.category || 'medicamentos',
-      price: finalProduct.price || 19.9,
-      pmcPrice: finalProduct.pmcPrice || finalProduct.price * 1.25,
-      originalPrice: finalProduct.pmcPrice || finalProduct.price * 1.25,
-      stock: finalProduct.stock || 50,
+      price: finalPrice,
+      pmcPrice: finalProduct.pmcPrice || 0,
+      originalPrice: finalProduct.pmcPrice || 0,
+      stock: finalProduct.stock !== undefined ? finalProduct.stock : 0,
       prescriptionType: finalProduct.prescriptionType || 'none',
       isGeneric: finalProduct.isGeneric || false,
       isOffer: finalProduct.isOffer || false,
       offerTag: finalProduct.offerTag || '',
       description: finalProduct.description || '',
-      ean: finalProduct.ean || '7891234567890',
+      ean: finalProduct.ean || '',
       ms: finalProduct.ms || '',
-      manufacturer: finalProduct.manufacturer || '',
+      manufacturer: lab || finalProduct.manufacturer || '',
       activeIngredient: finalProduct.activeIngredient || '',
       image: finalProduct.image || '',
       isActive: true,
@@ -650,8 +918,61 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setSelectedQueueIdx(Math.min(itemIdx, updated.length - 1));
     } else {
       setSelectedQueueIdx(null);
-      alert('Todos os itens da fila de importação foram salvos e integrados ao catálogo!');
+      alert('Todos os itens da fila de importação foram integrados ao catálogo!');
       setActiveTab('products');
+    }
+  };
+
+  // Mass Import All Queue Items Instantaneously
+  const handleImportAllQueue = () => {
+    if (importedQueue.length === 0) return;
+
+    let importedCount = 0;
+    let unpricedCount = 0;
+
+    importedQueue.forEach((item) => {
+      if (!item.name) return;
+      const lab = item.manufacturer || item.brand
+        ? matchAndAssimilateLaboratory(item.manufacturer || item.brand || '')
+        : '';
+      const itemPrice = item.price !== undefined && !isNaN(item.price) && item.price >= 0 ? item.price : 0;
+      if (itemPrice === 0) unpricedCount++;
+
+      onAddProduct({
+        name: item.name,
+        brand: lab || item.brand || '',
+        category: item.category || 'medicamentos',
+        price: itemPrice,
+        pmcPrice: item.pmcPrice || 0,
+        originalPrice: item.pmcPrice || 0,
+        stock: item.stock !== undefined ? item.stock : 0,
+        prescriptionType: item.prescriptionType || 'none',
+        isGeneric: item.isGeneric || false,
+        isOffer: item.isOffer || false,
+        offerTag: item.offerTag || '',
+        description: item.description || '',
+        ean: item.ean || '',
+        ms: item.ms || '',
+        manufacturer: lab || item.manufacturer || '',
+        activeIngredient: item.activeIngredient || '',
+        image: item.image || '',
+        isActive: true,
+      });
+      importedCount++;
+    });
+
+    setImportedQueue([]);
+    setSelectedQueueIdx(null);
+    setImportText('');
+
+    alert(
+      `✓ Sucesso! ${importedCount} produto(s) importado(s) em massa para o catálogo.\n\n` +
+      `• Laboratórios novos foram cadastrados/assimilados automaticamente.\n` +
+      (unpricedCount > 0 ? `• ${unpricedCount} item(ns) estão sem precificação (R$ 0,00) e foram direcionados para a aba "Sem Precificação" para você definir o valor.` : '')
+    );
+    setActiveTab('products');
+    if (unpricedCount > 0) {
+      setSelectedDeptFilter('unpriced');
     }
   };
 
@@ -667,8 +988,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     if (selectedDeptFilter === 'medicamentos') return prod.category === 'medicamentos';
     if (selectedDeptFilter === 'perfumaria') return prod.category === 'perfumaria' || prod.category === 'higiene';
+    if (selectedDeptFilter === 'perfumaria_no_image') return (prod.category === 'perfumaria' || prod.category === 'higiene') && !prod.image;
     if (selectedDeptFilter === 'genericos') return prod.isGeneric;
-    if (selectedDeptFilter === 'incomplete') return !prod.ms || !prod.image;
+    if (selectedDeptFilter === 'unpriced') return !prod.price || prod.price <= 0;
+    if (selectedDeptFilter === 'incomplete') {
+      const missingMs = !prod.ms || (prod.category === 'medicamentos' && prod.ms !== 'ISENTO' && !/^\d+$/.test(prod.ms.replace(/\D/g, '')));
+      const missingImage = !prod.image;
+      const missingDesc = !prod.description;
+      const missingPrice = !prod.price || prod.price <= 0;
+      return missingMs || missingImage || missingDesc || missingPrice;
+    }
 
     return true;
   });
@@ -979,15 +1308,102 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     Genéricos ({products.filter((p) => p.isGeneric).length})
                   </button>
                   <button
+                    onClick={() => setSelectedDeptFilter('unpriced')}
+                    className={`px-3 py-1.5 rounded-xl border transition ${
+                      selectedDeptFilter === 'unpriced'
+                        ? 'bg-rose-700 text-white border-rose-700 font-extrabold shadow-xs'
+                        : 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100'
+                    }`}
+                    title="Produtos cadastrados sem valor de preço de venda (Preço R$ 0,00)"
+                  >
+                    💰 Sem Precificação ({products.filter((p) => !p.price || p.price <= 0).length})
+                  </button>
+                  <button
                     onClick={() => setSelectedDeptFilter('incomplete')}
                     className={`px-3 py-1.5 rounded-xl border transition ${
                       selectedDeptFilter === 'incomplete'
-                        ? 'bg-amber-500 text-white border-amber-500 font-extrabold'
+                        ? 'bg-amber-500 text-white border-amber-500 font-extrabold shadow-xs'
                         : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
                     }`}
+                    title="Produtos com dados incompletos (Falta MS/Isento, Foto, Descrição ou Preço)"
                   >
-                    Sem MS / Imagem ({products.filter((p) => !p.ms || !p.image).length})
+                    ⚠️ Informações Incompletas ({
+                      products.filter((p) => {
+                        const missingMs = !p.ms || (p.category === 'medicamentos' && p.ms !== 'ISENTO' && !/^\d+$/.test(p.ms.replace(/\D/g, '')));
+                        const missingPrice = !p.price || p.price <= 0;
+                        return missingMs || !p.image || !p.description || missingPrice;
+                      }).length
+                    })
                   </button>
+                  <button
+                    onClick={() => setSelectedDeptFilter('perfumaria_no_image')}
+                    className={`px-3 py-1.5 rounded-xl border transition ${
+                      selectedDeptFilter === 'perfumaria_no_image'
+                        ? 'bg-purple-600 text-white border-purple-600 font-extrabold shadow-xs'
+                        : 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
+                    }`}
+                    title="Itens de Perfumaria e Higiene sem foto de produto"
+                  >
+                    🖼️ Perfumaria sem Imagem ({
+                      products.filter((p) => (p.category === 'perfumaria' || p.category === 'higiene') && !p.image).length
+                    })
+                  </button>
+                </div>
+              </div>
+
+              {/* Batch Selection / Mass Edit Control Toolbar */}
+              <div className="bg-slate-900 text-white p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md border border-slate-800 my-2">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAllVisible(filteredProducts)}
+                    className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-700 transition cursor-pointer"
+                  >
+                    {filteredProducts.length > 0 && filteredProducts.every((p) => selectedProductIds.includes(p.id)) ? (
+                      <>
+                        <CheckSquare className="w-4 h-4 text-emerald-400" />
+                        <span>Desmarcar Visíveis ({filteredProducts.length})</span>
+                      </>
+                    ) : (
+                      <>
+                        <Square className="w-4 h-4 text-slate-400" />
+                        <span>Selecionar Todos em Tela ({filteredProducts.length})</span>
+                      </>
+                    )}
+                  </button>
+
+                  {selectedProductIds.length > 0 && (
+                    <span className="text-xs font-black text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-800 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{selectedProductIds.length} selecionado(s)</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedProductIds.length > 0 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsMassEditOpen(true)}
+                        className="bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-black px-4 py-2 rounded-xl shadow-md flex items-center gap-1.5 transition cursor-pointer animate-pulse"
+                      >
+                        <Sliders className="w-4 h-4 text-amber-300" />
+                        <span>⚡ EDIÇÃO & MANUTENÇÃO EM MASSA ({selectedProductIds.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearSelection}
+                        className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 transition cursor-pointer"
+                      >
+                        Limpar
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 font-medium hidden md:inline">
+                      💡 Marque os produtos para realizar edição rápida e manutenção em lote.
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1001,11 +1417,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     return (
                       <div
                         key={prod.id}
-                        className="bg-white rounded-3xl border border-slate-200 shadow-xs hover:shadow-md transition flex flex-col justify-between overflow-hidden p-4 space-y-3"
+                        className={`bg-white rounded-3xl border transition flex flex-col justify-between overflow-hidden p-4 space-y-3 ${
+                          selectedProductIds.includes(prod.id)
+                            ? 'border-emerald-500 ring-2 ring-emerald-400/50 bg-emerald-50/10 shadow-md'
+                            : 'border-slate-200 shadow-xs hover:shadow-md'
+                        }`}
                       >
                         <div>
                           {/* Image Header & Badges */}
                           <div className="relative w-full h-40 bg-slate-50 rounded-2xl border border-slate-100 p-3 flex items-center justify-center mb-3">
+                            {/* Selection Checkbox Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSelectProduct(prod.id);
+                              }}
+                              className={`absolute top-2 left-2 z-20 p-1.5 rounded-xl border transition shadow-xs flex items-center justify-center cursor-pointer ${
+                                selectedProductIds.includes(prod.id)
+                                  ? 'bg-emerald-600 text-white border-emerald-500'
+                                  : 'bg-white/90 backdrop-blur-xs text-slate-400 border-slate-300 hover:text-slate-800'
+                              }`}
+                              title={selectedProductIds.includes(prod.id) ? 'Desmarcar produto' : 'Selecionar para manutenção em massa'}
+                            >
+                              {selectedProductIds.includes(prod.id) ? (
+                                <CheckSquare className="w-4 h-4 text-white" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-400" />
+                              )}
+                            </button>
+
                             {prod.image ? (
                               <img
                                 src={prod.image}
@@ -1066,8 +1507,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-[10px] text-slate-400">
                               <span>EAN: {prod.ean || 'S/ EAN'}</span>
                               <span>•</span>
-                              <span>MS: {prod.ms || 'Isento'}</span>
+                              <span className={!prod.ms ? 'text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded' : ''}>
+                                MS: {prod.ms || '⚠️ Pendente'}
+                              </span>
                             </div>
+
+                            {/* Missing Fields Warning Tags */}
+                            {(!prod.ms || !prod.image || !prod.description || !prod.price || prod.price <= 0) && (
+                              <div className="flex flex-wrap gap-1 pt-1.5">
+                                {(!prod.price || prod.price <= 0) && (
+                                  <span className="text-[9px] font-bold text-rose-800 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded-md">
+                                    💰 Sem Precificação (R$ 0,00)
+                                  </span>
+                                )}
+                                {!prod.ms && (
+                                  <span className="text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md">
+                                    ⚠️ Falta MS / Clicar ISENTO
+                                  </span>
+                                )}
+                                {!prod.image && (
+                                  <span className="text-[9px] font-bold text-purple-800 bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded-md">
+                                    🖼️ Falta Imagem
+                                  </span>
+                                )}
+                                {!prod.description && (
+                                  <span className="text-[9px] font-bold text-blue-800 bg-blue-100 border border-blue-300 px-1.5 py-0.5 rounded-md">
+                                    📝 Falta Descrição Bula
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1076,9 +1545,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <div className="flex items-baseline justify-between">
                             <div>
                               <span className="text-xs text-slate-400 font-medium block">Preço de Venda</span>
-                              <span className="text-lg font-black text-slate-900">
-                                R$ {prod.price.toFixed(2).replace('.', ',')}
-                              </span>
+                              {!prod.price || prod.price <= 0 ? (
+                                <span className="text-xs font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md inline-block">
+                                  Sob Consulta (R$ 0,00)
+                                </span>
+                              ) : (
+                                <span className="text-lg font-black text-slate-900">
+                                  R$ {prod.price.toFixed(2).replace('.', ',')}
+                                </span>
+                              )}
                             </div>
 
                             {savings > 0 && (
@@ -1145,10 +1620,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {filteredProducts.map((prod) => (
                     <div
                       key={prod.id}
-                      className="bg-white rounded-2xl border border-slate-200 p-3 flex flex-col justify-between space-y-2 hover:border-rose-300 transition shadow-xs"
+                      className={`bg-white rounded-2xl border p-3 flex flex-col justify-between space-y-2 transition shadow-xs ${
+                        selectedProductIds.includes(prod.id)
+                          ? 'border-emerald-500 ring-2 ring-emerald-400/50 bg-emerald-50/10'
+                          : 'border-slate-200 hover:border-rose-300'
+                      }`}
                     >
                       <div>
                         <div className="w-full h-24 bg-slate-50 rounded-xl p-2 flex items-center justify-center mb-2 relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSelectProduct(prod.id);
+                            }}
+                            className={`absolute top-1 left-1 z-20 p-1 rounded-lg border transition shadow-xs flex items-center justify-center cursor-pointer ${
+                              selectedProductIds.includes(prod.id)
+                                ? 'bg-emerald-600 text-white border-emerald-500'
+                                : 'bg-white/90 text-slate-400 border-slate-300 hover:text-slate-800'
+                            }`}
+                            title="Selecionar produto"
+                          >
+                            {selectedProductIds.includes(prod.id) ? (
+                              <CheckSquare className="w-3.5 h-3.5 text-white" />
+                            ) : (
+                              <Square className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </button>
+
                           {prod.image ? (
                             <img src={prod.image} alt={prod.name} className="w-full h-full object-contain" />
                           ) : (
@@ -1217,6 +1716,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <table className="w-full text-left border-collapse text-xs sm:text-sm">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
+                          <th className="p-3 w-10 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectAllVisible(filteredProducts)}
+                              className="text-slate-500 hover:text-emerald-600 cursor-pointer"
+                              title="Selecionar / Desmarcar todos em tela"
+                            >
+                              {filteredProducts.length > 0 && filteredProducts.every((p) => selectedProductIds.includes(p.id)) ? (
+                                <CheckSquare className="w-4 h-4 text-emerald-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-400" />
+                              )}
+                            </button>
+                          </th>
                           <th className="p-3">Item</th>
                           <th className="p-3">Nome / Laboratório</th>
                           <th className="p-3">Ativo / EAN / Registro MS</th>
@@ -1230,7 +1743,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           const refPrice = prod.originalPrice || prod.pmcPrice;
                           const savings = refPrice && refPrice > prod.price ? refPrice - prod.price : 0;
                           return (
-                            <tr key={prod.id} className="hover:bg-slate-50/80">
+                            <tr key={prod.id} className={`hover:bg-slate-50/80 transition ${selectedProductIds.includes(prod.id) ? 'bg-emerald-50/40' : ''}`}>
+                              <td className="p-3 w-10 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSelectProduct(prod.id)}
+                                  className="text-slate-400 hover:text-emerald-600 cursor-pointer"
+                                >
+                                  {selectedProductIds.includes(prod.id) ? (
+                                    <CheckSquare className="w-4 h-4 text-emerald-600" />
+                                  ) : (
+                                    <Square className="w-4 h-4 text-slate-400" />
+                                  )}
+                                </button>
+                              </td>
                               <td className="p-3 w-14">
                                 <div className="w-10 h-10 bg-slate-100 rounded-lg p-1 flex items-center justify-center border border-slate-200">
                                   {prod.image ? (
@@ -1436,15 +1962,25 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
               {/* Post-Import Queue Item-by-Item Classifier */}
               {importedQueue.length > 0 && selectedQueueIdx !== null && (
                 <div className="bg-amber-50/60 p-5 rounded-2xl border border-amber-200 space-y-4">
-                  <div className="flex justify-between items-center border-b border-amber-200 pb-3">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-amber-200 pb-3">
                     <div>
-                      <h3 className="font-extrabold text-sm text-amber-950">
-                        Fila de Conferência de Cadastros ({selectedQueueIdx + 1} de {importedQueue.length})
+                      <h3 className="font-extrabold text-sm text-amber-950 flex items-center gap-2">
+                        <span>Fila de Conferência de Cadastros ({selectedQueueIdx + 1} de {importedQueue.length})</span>
                       </h3>
                       <p className="text-xs text-amber-800">
-                        Marque item a item se é Perfumaria ou Medicamento com Tarja, e informe o Registro MS ou selecione imagem.
+                        Confira as informações importadas, ajuste preços/laboratórios ou salve todos em massa com um clique.
                       </p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={handleImportAllQueue}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition shrink-0 active:scale-98"
+                      title="Salva e importa todos os itens da fila preservando todos os campos carregados"
+                    >
+                      <Zap className="w-4 h-4 text-amber-300" />
+                      <span>Importar Todos ({importedQueue.length}) em Massa</span>
+                    </button>
                   </div>
 
                   {(() => {
@@ -1453,8 +1989,8 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
 
                     return (
                       <div className="bg-white p-4 rounded-xl border border-amber-200 space-y-4 text-xs">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="sm:col-span-2">
                             <label className="font-bold text-slate-700 block mb-1">Nome do Produto</label>
                             <input
                               type="text"
@@ -1469,7 +2005,7 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                           </div>
 
                           <div>
-                            <label className="font-bold text-slate-700 block mb-1">Código EAN</label>
+                            <label className="font-bold text-slate-700 block mb-1">Código EAN (Barras)</label>
                             <input
                               type="text"
                               value={currentItem.ean || ''}
@@ -1478,8 +2014,97 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                                 copy[selectedQueueIdx].ean = e.target.value;
                                 setImportedQueue(copy);
                               }}
+                              placeholder="Opcional"
                               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-mono text-slate-900"
                             />
+                          </div>
+                        </div>
+
+                        {/* Price, Stock, PMC, Laboratory */}
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">
+                              Preço de Venda (R$)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={currentItem.price !== undefined ? currentItem.price : ''}
+                              onChange={(e) => {
+                                const copy = [...importedQueue];
+                                const val = parseFloat(e.target.value);
+                                copy[selectedQueueIdx].price = !isNaN(val) && val >= 0 ? val : 0;
+                                setImportedQueue(copy);
+                              }}
+                              placeholder="0,00 (Sem Preço)"
+                              className={`w-full border rounded-xl p-2 font-mono font-bold ${
+                                !currentItem.price || currentItem.price <= 0
+                                  ? 'bg-rose-50 border-rose-300 text-rose-700'
+                                  : 'bg-slate-50 border-slate-300 text-slate-900'
+                              }`}
+                            />
+                            {(!currentItem.price || currentItem.price <= 0) && (
+                              <span className="text-[10px] text-rose-600 font-bold block mt-0.5">
+                                ⚠️ Item sem precificação
+                              </span>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">PMC / Ref. (R$)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={currentItem.pmcPrice !== undefined ? currentItem.pmcPrice : ''}
+                              onChange={(e) => {
+                                const copy = [...importedQueue];
+                                const val = parseFloat(e.target.value);
+                                copy[selectedQueueIdx].pmcPrice = !isNaN(val) ? val : 0;
+                                setImportedQueue(copy);
+                              }}
+                              placeholder="Opcional"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-mono text-slate-900"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Estoque Inicial</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={currentItem.stock !== undefined ? currentItem.stock : 0}
+                              onChange={(e) => {
+                                const copy = [...importedQueue];
+                                const val = parseInt(e.target.value);
+                                copy[selectedQueueIdx].stock = !isNaN(val) && val >= 0 ? val : 0;
+                                setImportedQueue(copy);
+                              }}
+                              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-mono text-slate-900"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Laboratório / Fabricante</label>
+                            <input
+                              type="text"
+                              list="laboratories_list_import"
+                              value={currentItem.manufacturer || currentItem.brand || ''}
+                              onChange={(e) => {
+                                const copy = [...importedQueue];
+                                copy[selectedQueueIdx].manufacturer = e.target.value;
+                                copy[selectedQueueIdx].brand = e.target.value;
+                                setImportedQueue(copy);
+                              }}
+                              placeholder="Ex: Medley, EMS, Eurofarma"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900"
+                            />
+                            <datalist id="laboratories_list_import">
+                              {laboratories.map((lab, i) => (
+                                <option key={i} value={lab} />
+                              ))}
+                            </datalist>
                           </div>
                         </div>
 
@@ -1508,10 +2133,9 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                           </div>
 
                           <div>
-                            <label className="font-bold text-slate-700 block mb-1">Registro no Ministério da Saúde (MS)</label>
+                            <label className="font-bold text-slate-700 block mb-1">Registro MS</label>
                             <input
                               type="text"
-                              disabled={!currentItem.ms && currentItem.ms !== '' && false}
                               value={currentItem.ms || ''}
                               onChange={(e) => {
                                 const copy = [...importedQueue];
@@ -1532,7 +2156,7 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                                 }}
                                 className="w-3.5 h-3.5 accent-rose-600 rounded"
                               />
-                              <span className="text-[10px] text-slate-600 font-bold">Não possui Registro MS (Isento/Cosmético)</span>
+                              <span className="text-[10px] text-slate-600 font-bold">Registro MS Isento / Cosmético</span>
                             </label>
                           </div>
 
@@ -1568,19 +2192,32 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-center pt-3 border-t">
-                          <span className="text-slate-500 font-medium">
-                            Preço: R$ {currentItem.price?.toFixed(2)} | Estoque: {currentItem.stock} un.
-                          </span>
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-3 border-t">
+                          <div className="text-slate-600 font-bold text-xs flex items-center gap-2">
+                            <span>Preço:</span>
+                            {!currentItem.price || currentItem.price <= 0 ? (
+                              <span className="text-rose-600 font-black bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                Sem Preço (R$ 0,00)
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700 font-black">
+                                R$ {currentItem.price.toFixed(2).replace('.', ',')}
+                              </span>
+                            )}
+                            <span className="text-slate-300">•</span>
+                            <span>Estoque: {currentItem.stock || 0} un.</span>
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleSaveQueueItem(selectedQueueIdx, currentItem)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-md transition"
-                          >
-                            <Check className="w-4 h-4" />
-                            <span>Confirmar & Salvar Produto</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveQueueItem(selectedQueueIdx, currentItem)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-md transition"
+                            >
+                              <Check className="w-4 h-4" />
+                              <span>Salvar Este Produto</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -2219,6 +2856,68 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                 />
               </div>
 
+              {/* Admin Panel Security / Password Management */}
+              <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                  <div className="w-9 h-9 bg-rose-600 rounded-xl flex items-center justify-center shadow-md">
+                    <KeyRound className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-white flex items-center gap-2">
+                      <span>Segurança & Senha do Painel Administrativo</span>
+                      <span className="bg-rose-950 text-rose-400 border border-rose-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                        Acesso Restrito
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Defina o usuário e a senha de segurança para acesso ao painel de controle.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-300 mb-1">
+                      Usuário Administrador
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.adminUsername || 'admin'}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, adminUsername: e.target.value })}
+                      placeholder="Ex: admin"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-300 mb-1">
+                      Senha de Acesso ao Painel Admin
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showAdminPass ? 'text' : 'password'}
+                        value={settingsForm.adminPassword || 'admin123'}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, adminPassword: e.target.value })}
+                        placeholder="Digite a nova senha de segurança"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-rose-500 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPass(!showAdminPass)}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white p-0.5 transition cursor-pointer"
+                        title={showAdminPass ? 'Ocultar Senha' : 'Exibir Senha'}
+                      >
+                        {showAdminPass ? <EyeOff className="w-4 h-4 text-rose-400" /> : <Eye className="w-4 h-4 text-slate-400" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-amber-400 font-medium flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Ao salvar, as novas credenciais serão exigidas no próximo login de administrador.</span>
+                </p>
+              </div>
+
               {/* Splash Screen Simulation Trigger Button */}
               <div className="bg-rose-50 p-4 rounded-2xl border border-rose-200 space-y-2">
                 <div className="flex items-center justify-between">
@@ -2492,6 +3191,36 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block font-bold text-rose-950 text-xs mb-1">
+                        Data Inicial da Oferta
+                      </label>
+                      <input
+                        type="date"
+                        value={productForm.offerStartDate || ''}
+                        onChange={(e) =>
+                          setProductForm({ ...productForm, offerStartDate: e.target.value })
+                        }
+                        className="w-full bg-white border border-rose-300 rounded-xl p-2 text-xs outline-none text-slate-800 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-rose-950 text-xs mb-1">
+                        Data Final da Oferta (Término)
+                      </label>
+                      <input
+                        type="date"
+                        value={productForm.offerEndDate || ''}
+                        onChange={(e) =>
+                          setProductForm({ ...productForm, offerEndDate: e.target.value })
+                        }
+                        className="w-full bg-white border border-rose-300 rounded-xl p-2 text-xs outline-none text-slate-800 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-rose-950 text-xs mb-1">
                         Texto de Validade da Oferta
                       </label>
                       <input
@@ -2733,6 +3462,518 @@ Perfume Eau de Parfum Rose 100ml;7891234567895;189.90;15;249.90;Fragrância;Bout
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* CREATE CATEGORY MODAL */}
+      {isMassEditOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-6 space-y-5 shadow-2xl border border-slate-200 my-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="font-black text-slate-900 text-base sm:text-lg flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-rose-600" />
+                  <span>Manutenção & Edição em Massa de Produtos</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Alteração rápida de características para{' '}
+                  <strong className="text-rose-600 font-extrabold">{selectedProductIds.length} produto(s) selecionado(s)</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMassEditOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mass Edit Category Tabs */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-slate-100 font-extrabold text-xs">
+              <button
+                type="button"
+                onClick={() => setMassEditTab('prices')}
+                className={`px-3 py-2 rounded-xl border flex items-center gap-1.5 transition ${
+                  massEditTab === 'prices'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>Preços</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMassEditTab('offers')}
+                className={`px-3 py-2 rounded-xl border flex items-center gap-1.5 transition ${
+                  massEditTab === 'offers'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <Tag className="w-4 h-4" />
+                <span>Ofertas & Validades</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMassEditTab('stock')}
+                className={`px-3 py-2 rounded-xl border flex items-center gap-1.5 transition ${
+                  massEditTab === 'stock'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <Package className="w-4 h-4" />
+                <span>Estoque</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMassEditTab('lab')}
+                className={`px-3 py-2 rounded-xl border flex items-center gap-1.5 transition ${
+                  massEditTab === 'lab'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <Building2 className="w-4 h-4" />
+                <span>Laboratório</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMassEditTab('category')}
+                className={`px-3 py-2 rounded-xl border flex items-center gap-1.5 transition ${
+                  massEditTab === 'category'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>Categoria / Receita</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMassEditTab('status')}
+                className={`px-3 py-2 rounded-xl border flex items-center gap-1.5 transition ${
+                  massEditTab === 'status'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Ativação & Exclusão</span>
+              </button>
+            </div>
+
+            {/* TAB 1: PRICES */}
+            {massEditTab === 'prices' && (
+              <div className="space-y-4 text-xs sm:text-sm">
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl text-amber-900 font-medium">
+                  💡 Atualize os preços de venda de todos os <strong>{selectedProductIds.length}</strong> produtos selecionados de uma só vez.
+                </div>
+
+                <div className="space-y-2">
+                  <label className="font-extrabold text-slate-800 block">Tipo de Reajuste</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massPriceType === 'fixed' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massPriceType"
+                        checked={massPriceType === 'fixed'}
+                        onChange={() => setMassPriceType('fixed')}
+                        className="accent-rose-600"
+                      />
+                      <span>Fixar Preço Único (R$)</span>
+                    </label>
+
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massPriceType === 'discount_percent' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massPriceType"
+                        checked={massPriceType === 'discount_percent'}
+                        onChange={() => setMassPriceType('discount_percent')}
+                        className="accent-rose-600"
+                      />
+                      <span>Desconto Percentual (%)</span>
+                    </label>
+
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massPriceType === 'increase_percent' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massPriceType"
+                        checked={massPriceType === 'increase_percent'}
+                        onChange={() => setMassPriceType('increase_percent')}
+                        className="accent-rose-600"
+                      />
+                      <span>Aumento Percentual (%)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-extrabold text-slate-800 block mb-1">
+                    {massPriceType === 'fixed' ? 'Valor do Preço Final (R$)' : 'Percentual (%)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={massPriceValue}
+                    onChange={(e) => setMassPriceValue(e.target.value)}
+                    placeholder={massPriceType === 'fixed' ? 'Ex: 19.90' : 'Ex: 10'}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 outline-none focus:border-rose-600 font-mono font-black text-rose-600 text-base"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleApplyMassPrice}
+                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check className="w-5 h-5" />
+                  <span>Aplicar Reajuste de Preço ({selectedProductIds.length} Itens)</span>
+                </button>
+              </div>
+            )}
+
+            {/* TAB 2: OFFERS & DATES */}
+            {massEditTab === 'offers' && (
+              <div className="space-y-4 text-xs sm:text-sm">
+                <div className="bg-rose-50 border border-rose-200 p-3 rounded-2xl text-rose-950 font-medium">
+                  🔥 Configure ou encerre ofertas promocionais e defina a <strong>duração/validade por datas</strong>. As ofertas são desativadas automaticamente após expirar a data limite ou se o estoque zerar.
+                </div>
+
+                <div className="space-y-2">
+                  <label className="font-extrabold text-slate-800 block">Ação para Oferta</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massOfferAction === 'enable' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massOfferAction"
+                        checked={massOfferAction === 'enable'}
+                        onChange={() => setMassOfferAction('enable')}
+                        className="accent-rose-600"
+                      />
+                      <span>Marcar como Oferta Promocional</span>
+                    </label>
+
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massOfferAction === 'dates_only' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massOfferAction"
+                        checked={massOfferAction === 'dates_only'}
+                        onChange={() => setMassOfferAction('dates_only')}
+                        className="accent-rose-600"
+                      />
+                      <span>Atualizar Apenas Datas de Validade</span>
+                    </label>
+
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massOfferAction === 'disable' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massOfferAction"
+                        checked={massOfferAction === 'disable'}
+                        onChange={() => setMassOfferAction('disable')}
+                        className="accent-rose-600"
+                      />
+                      <span>Remover da Oferta</span>
+                    </label>
+                  </div>
+                </div>
+
+                {massOfferAction !== 'disable' && (
+                  <div className="space-y-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1">
+                        Selo da Oferta / Badge (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={massOfferTag}
+                        onChange={(e) => setMassOfferTag(e.target.value)}
+                        placeholder="Ex: OFERTA DA SEMANA / LEVE 3 PAGUE 2"
+                        className="w-full bg-white border border-slate-300 rounded-xl p-2.5 outline-none text-xs font-bold"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1">
+                          Data de Início da Oferta
+                        </label>
+                        <input
+                          type="date"
+                          value={massOfferStartDate}
+                          onChange={(e) => setMassOfferStartDate(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 outline-none text-xs font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1">
+                          Data de Término (Expira em)
+                        </label>
+                        <input
+                          type="date"
+                          value={massOfferEndDate}
+                          onChange={(e) => setMassOfferEndDate(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 outline-none text-xs font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleApplyMassOffer}
+                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check className="w-5 h-5" />
+                  <span>Aplicar Configuração de Oferta ({selectedProductIds.length} Itens)</span>
+                </button>
+              </div>
+            )}
+
+            {/* TAB 3: STOCK */}
+            {massEditTab === 'stock' && (
+              <div className="space-y-4 text-xs sm:text-sm">
+                <div className="bg-slate-100 border border-slate-200 p-3 rounded-2xl text-slate-800 font-medium">
+                  📦 Atualize rapidamente a quantidade em estoque para os <strong>{selectedProductIds.length}</strong> produtos selecionados.
+                </div>
+
+                <div className="space-y-2">
+                  <label className="font-extrabold text-slate-800 block">Operação de Estoque</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massStockType === 'fixed' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massStockType"
+                        checked={massStockType === 'fixed'}
+                        onChange={() => setMassStockType('fixed')}
+                        className="accent-rose-600"
+                      />
+                      <span>Fixar Quantidade Exata</span>
+                    </label>
+
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massStockType === 'add' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massStockType"
+                        checked={massStockType === 'add'}
+                        onChange={() => setMassStockType('add')}
+                        className="accent-rose-600"
+                      />
+                      <span>Adicionar (+ Quantidade)</span>
+                    </label>
+
+                    <label className={`p-3 rounded-2xl border cursor-pointer font-bold flex items-center gap-2 ${
+                      massStockType === 'subtract' ? 'bg-rose-50 border-rose-600 text-rose-950' : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="massStockType"
+                        checked={massStockType === 'subtract'}
+                        onChange={() => setMassStockType('subtract')}
+                        className="accent-rose-600"
+                      />
+                      <span>Subtrair (- Quantidade)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-extrabold text-slate-800 block mb-1">
+                    Quantidade de Unidades
+                  </label>
+                  <input
+                    type="number"
+                    value={massStockValue}
+                    onChange={(e) => setMassStockValue(e.target.value)}
+                    placeholder="Ex: 20"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 outline-none focus:border-rose-600 font-mono font-black text-slate-900 text-base"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleApplyMassStock}
+                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check className="w-5 h-5" />
+                  <span>Atualizar Estoque ({selectedProductIds.length} Itens)</span>
+                </button>
+              </div>
+            )}
+
+            {/* TAB 4: LABORATORY */}
+            {massEditTab === 'lab' && (
+              <div className="space-y-4 text-xs sm:text-sm">
+                <div className="bg-slate-100 border border-slate-200 p-3 rounded-2xl text-slate-800 font-medium">
+                  🏢 Atribua ou normalize o laboratório/fabricante em massa. Se o laboratório for novo, será cadastrado e assimilado automaticamente.
+                </div>
+
+                <div>
+                  <label className="font-extrabold text-slate-800 block mb-1">
+                    Nome do Laboratório / Fabricante
+                  </label>
+                  <input
+                    type="text"
+                    value={massLab}
+                    onChange={(e) => setMassLab(e.target.value)}
+                    placeholder="Ex: Eurofarma, Medley, EMS, Neo Química..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-3 outline-none focus:border-rose-600 font-bold text-slate-900 text-sm"
+                  />
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {laboratories.slice(0, 8).map((lab) => (
+                      <button
+                        type="button"
+                        key={lab}
+                        onClick={() => setMassLab(lab)}
+                        className="text-[10px] bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-800 font-bold px-2 py-1 rounded-lg border border-slate-200"
+                      >
+                        + {lab}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleApplyMassLab}
+                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check className="w-5 h-5" />
+                  <span>Atribuir Laboratório ({selectedProductIds.length} Itens)</span>
+                </button>
+              </div>
+            )}
+
+            {/* TAB 5: CATEGORY & CLASSIFICATION */}
+            {massEditTab === 'category' && (
+              <div className="space-y-4 text-xs sm:text-sm">
+                <div className="bg-slate-100 border border-slate-200 p-3 rounded-2xl text-slate-800 font-medium">
+                  🏷️ Altere a seção, tipo de retenção de receita ou status de genérico para os <strong>{selectedProductIds.length}</strong> produtos.
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Mudar Seção / Categoria</label>
+                    <select
+                      value={massCategory}
+                      onChange={(e) => setMassCategory(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2.5 outline-none font-bold"
+                    >
+                      <option value="">(Não alterar categoria)</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Tipo de Receita / Tarja</label>
+                    <select
+                      value={massPrescription}
+                      onChange={(e) => setMassPrescription(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2.5 outline-none font-bold"
+                    >
+                      <option value="">(Não alterar receita)</option>
+                      <option value="none">Isento de Prescrição / MIP</option>
+                      <option value="red">Tarja Vermelha (Sem retenção)</option>
+                      <option value="red_retention">Tarja Vermelha (Com Retenção de Receita)</option>
+                      <option value="black">Tarja Preta (Retenção Especial)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Medicamento Genérico (G)</label>
+                  <select
+                    value={massGeneric}
+                    onChange={(e) => setMassGeneric(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 outline-none font-bold"
+                  >
+                    <option value="">(Não alterar status de genérico)</option>
+                    <option value="yes">Marcar como Medicamento Genérico (G)</option>
+                    <option value="no">Desmarcar Genérico</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleApplyMassCategory}
+                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <Check className="w-5 h-5" />
+                  <span>Atualizar Classificação ({selectedProductIds.length} Itens)</span>
+                </button>
+              </div>
+            )}
+
+            {/* TAB 6: STATUS & DELETE */}
+            {massEditTab === 'status' && (
+              <div className="space-y-4 text-xs sm:text-sm">
+                <div className="bg-slate-100 border border-slate-200 p-3 rounded-2xl text-slate-800 font-medium">
+                  🟢 Ative, desative ou exclua em lote os <strong>{selectedProductIds.length}</strong> produtos selecionados.
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleMassToggleStatus(true)}
+                    className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-xs sm:text-sm"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span>Ativar Todos no App</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleMassToggleStatus(false)}
+                    className="py-3 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-xs sm:text-sm"
+                  >
+                    <AlertCircle className="w-5 h-5" />
+                    <span>Ocultar / Desativar</span>
+                  </button>
+                </div>
+
+                <div className="border-t border-slate-200 pt-4 mt-4">
+                  <button
+                    type="button"
+                    onClick={handleMassDelete}
+                    className="w-full py-3.5 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl shadow-lg transition flex items-center justify-center gap-2 text-sm"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    <span>Excluir Definitivamente os {selectedProductIds.length} Produtos</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

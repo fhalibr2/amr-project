@@ -59,8 +59,24 @@ export default function App() {
   });
 
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('pharma_cart');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('pharma_cart');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((item) => item && item.product)
+          .map((item) => ({
+            product: item.product,
+            quantity: typeof item.quantity === 'number' && !isNaN(item.quantity) && item.quantity > 0 ? item.quantity : 1,
+            selectedDosage: item.selectedDosage,
+          }));
+      }
+      return [];
+    } catch {
+      localStorage.removeItem('pharma_cart');
+      return [];
+    }
   });
 
   // User & Admin Auth State
@@ -118,28 +134,57 @@ export default function App() {
 
   // Persistence Effects
   useEffect(() => {
-    localStorage.setItem('pharma_settings', JSON.stringify(settings));
+    try {
+      localStorage.setItem('pharma_settings', JSON.stringify(settings));
+    } catch (err) {
+      console.error('Error saving settings', err);
+    }
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem('pharma_products', JSON.stringify(products));
+    try {
+      localStorage.setItem('pharma_products', JSON.stringify(products));
+    } catch (err) {
+      console.error('Error saving products', err);
+    }
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem('pharma_categories', JSON.stringify(categories));
+    try {
+      localStorage.setItem('pharma_categories', JSON.stringify(categories));
+    } catch (err) {
+      console.error('Error saving categories', err);
+    }
   }, [categories]);
 
   useEffect(() => {
-    localStorage.setItem('pharma_orders', JSON.stringify(orders));
+    try {
+      localStorage.setItem('pharma_orders', JSON.stringify(orders));
+    } catch (err) {
+      console.error('Error saving orders', err);
+    }
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('pharma_cart', JSON.stringify(cart));
+    try {
+      const cleanCart = cart.map((item) => ({
+        product: item.product,
+        quantity: typeof item.quantity === 'number' && !isNaN(item.quantity) ? item.quantity : 1,
+        selectedDosage: item.selectedDosage,
+      }));
+      localStorage.setItem('pharma_cart', JSON.stringify(cleanCart));
+    } catch (err) {
+      console.error('Error saving cart', err);
+    }
   }, [cart]);
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('pharma_user', JSON.stringify(currentUser));
+      try {
+        localStorage.setItem('pharma_user', JSON.stringify(currentUser));
+      } catch (err) {
+        console.error('Error saving user', err);
+      }
     } else {
       localStorage.removeItem('pharma_user');
     }
@@ -186,35 +231,68 @@ export default function App() {
   };
 
   // Cart Operations
-  const handleAddToCart = (product: Product, quantityToAdd = 1, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const handleAddToCart = (
+    product: Product,
+    quantityOrEvent: number | React.MouseEvent = 1,
+    eventObj?: React.MouseEvent
+  ) => {
+    if (!product) return;
 
-    if (product.stock <= 0) {
+    let quantityToAdd = 1;
+    let e: React.MouseEvent | undefined = undefined;
+
+    if (typeof quantityOrEvent === 'number' && !isNaN(quantityOrEvent)) {
+      quantityToAdd = quantityOrEvent;
+      e = eventObj;
+    } else if (quantityOrEvent && typeof quantityOrEvent === 'object') {
+      e = quantityOrEvent as React.MouseEvent;
+    }
+
+    if (e && typeof e.stopPropagation === 'function') {
+      try {
+        e.stopPropagation();
+      } catch {
+        // ignore
+      }
+    }
+
+    const safeStock = typeof product.stock === 'number' ? product.stock : 0;
+    if (safeStock <= 0) {
       showToast('Produto indisponível no estoque');
       return;
     }
 
     // Play Sound Effect
     if (settings.soundEnabled) {
-      soundManager.playBeepSuccess();
+      try {
+        soundManager.playBeepSuccess();
+      } catch {
+        // ignore
+      }
     }
 
     // Flying Particle Animation Effect
-    let startX = window.innerWidth / 2;
-    let startY = window.innerHeight / 2;
+    let startX = typeof window !== 'undefined' ? window.innerWidth / 2 : 200;
+    let startY = typeof window !== 'undefined' ? window.innerHeight / 2 : 200;
 
-    if (e && e.clientX && e.clientY) {
+    if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number' && e.clientX > 0) {
       startX = e.clientX - 20;
       startY = e.clientY - 20;
     }
 
-    let endX = window.innerWidth - 60;
+    let endX = typeof window !== 'undefined' ? window.innerWidth - 60 : 300;
     let endY = 30;
 
     if (cartButtonRef.current) {
-      const rect = cartButtonRef.current.getBoundingClientRect();
-      endX = rect.left + rect.width / 2 - 20;
-      endY = rect.top + rect.height / 2 - 20;
+      try {
+        const rect = cartButtonRef.current.getBoundingClientRect();
+        if (rect && rect.width > 0) {
+          endX = rect.left + rect.width / 2 - 20;
+          endY = rect.top + rect.height / 2 - 20;
+        }
+      } catch {
+        // fallback
+      }
     }
 
     const particleId = Date.now() + Math.random();
@@ -240,19 +318,35 @@ export default function App() {
       setTimeout(() => setIsCartBouncing(false), 450);
     }, 600);
 
+    const safeQtyToAdd =
+      typeof quantityToAdd === 'number' && !isNaN(quantityToAdd) && quantityToAdd > 0
+        ? quantityToAdd
+        : 1;
+
     setCart((prev) => {
-      const existingIdx = prev.findIndex((item) => item.product.id === product.id);
+      const existingIdx = prev.findIndex((item) => item?.product?.id === product.id);
       if (existingIdx >= 0) {
         const updated = [...prev];
-        const newQty = updated[existingIdx].quantity + quantityToAdd;
-        if (newQty > product.stock) {
-          showToast(`Limite em estoque: ${product.stock} unidades`);
+        const currentQty =
+          typeof updated[existingIdx]?.quantity === 'number' && !isNaN(updated[existingIdx].quantity)
+            ? updated[existingIdx].quantity
+            : 1;
+        const newQty = currentQty + safeQtyToAdd;
+        if (newQty > safeStock) {
+          showToast(`Limite em estoque: ${safeStock} unidades`);
           return prev;
         }
-        updated[existingIdx].quantity = newQty;
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          quantity: newQty,
+        };
         return updated;
       } else {
-        return [...prev, { product, quantity: quantityToAdd }];
+        if (safeQtyToAdd > safeStock) {
+          showToast(`Limite em estoque: ${safeStock} unidades`);
+          return prev;
+        }
+        return [...prev, { product, quantity: safeQtyToAdd }];
       }
     });
 
@@ -266,7 +360,17 @@ export default function App() {
     }
     setCart((prev) => {
       const updated = [...prev];
-      updated[index].quantity = newQty;
+      const item = updated[index];
+      if (!item) return prev;
+      const stock = typeof item.product?.stock === 'number' ? item.product.stock : 0;
+      if (newQty > stock) {
+        showToast(`Limite em estoque: ${stock} unidades`);
+        return prev;
+      }
+      updated[index] = {
+        ...updated[index],
+        quantity: newQty,
+      };
       return updated;
     });
   };
@@ -614,7 +718,7 @@ export default function App() {
                             key={product.id}
                             product={product}
                             onSelect={(p) => setSelectedProduct(p)}
-                            onAddToCart={handleAddToCart}
+                            onAddToCart={(p, e) => handleAddToCart(p, 1, e)}
                             showStockToCustomer={settings.showStockToCustomer}
                           />
                         ))}
@@ -663,7 +767,7 @@ export default function App() {
                       key={product.id}
                       product={product}
                       onSelect={(p) => setSelectedProduct(p)}
-                      onAddToCart={handleAddToCart}
+                      onAddToCart={(p, e) => handleAddToCart(p, 1, e)}
                       showStockToCustomer={settings.showStockToCustomer}
                     />
                   ))}
@@ -801,6 +905,8 @@ export default function App() {
       {isAdminLoginOpen && (
         <AdminLoginModal
           isOpen={isAdminLoginOpen}
+          adminUsername={settings.adminUsername || 'admin'}
+          adminPassword={settings.adminPassword || 'admin123'}
           onClose={() => setIsAdminLoginOpen(false)}
           onLoginSuccess={() => {
             setIsAdminLoggedIn(true);

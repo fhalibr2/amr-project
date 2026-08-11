@@ -168,8 +168,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </span>
                   <button
                     onClick={() => onUpdateQuantity(index, item.quantity + 1)}
-                    className="w-7 h-7 flex items-center justify-center text-gray-700 hover:bg-gray-200 rounded-lg font-bold active:scale-90"
-                    title="Aumentar"
+                    disabled={item.quantity >= item.product.stock}
+                    className={`w-7 h-7 flex items-center justify-center rounded-lg font-bold transition ${
+                      item.quantity >= item.product.stock
+                        ? 'text-gray-300 bg-gray-50 cursor-not-allowed'
+                        : 'text-gray-700 hover:bg-gray-200 cursor-pointer active:scale-90'
+                    }`}
+                    title={
+                      item.quantity >= item.product.stock
+                        ? `Limite de estoque atingido (${item.product.stock} un)`
+                        : 'Aumentar'
+                    }
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>

@@ -18,10 +18,14 @@ export const MedicineBoxSvg: React.FC<MedicineBoxSvgProps> = ({
   category = '',
   className = 'w-full h-full object-contain',
 }) => {
+  const safeName = name || 'Medicamento';
+  const safeCategory = category || '';
+  const safeDosage = dosage || '';
+
   const isCosmeticOrHygienic =
-    category.toLowerCase().includes('higiene') ||
-    category.toLowerCase().includes('beleza') ||
-    category.toLowerCase().includes('dermocos');
+    safeCategory.toLowerCase().includes('higiene') ||
+    safeCategory.toLowerCase().includes('beleza') ||
+    safeCategory.toLowerCase().includes('dermocos');
 
   if (isCosmeticOrHygienic) {
     return (
@@ -63,7 +67,7 @@ export const MedicineBoxSvg: React.FC<MedicineBoxSvgProps> = ({
         <path d="M194 180h12M200 174v12" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
 
         <text x="200" y="220" textAnchor="middle" fill="#9f1239" fontSize="15" fontWeight="bold">
-          {name.slice(0, 16)}
+          {safeName.slice(0, 16)}
         </text>
         <text x="200" y="242" textAnchor="middle" fill="#64748b" fontSize="12">
           Cuidado & Dermo
@@ -165,11 +169,11 @@ export const MedicineBoxSvg: React.FC<MedicineBoxSvgProps> = ({
           fontWeight="900"
           fontFamily="system-ui, -apple-system, sans-serif"
         >
-          {name.length > 16 ? name.slice(0, 16) + '...' : name}
+          {safeName.length > 16 ? safeName.slice(0, 16) + '...' : safeName}
         </text>
 
         {/* Dosage / Quantity subtitle */}
-        {dosage && (
+        {safeDosage && (
           <text
             x="210"
             y="185"
@@ -179,7 +183,7 @@ export const MedicineBoxSvg: React.FC<MedicineBoxSvgProps> = ({
             fontWeight="600"
             fontFamily="sans-serif"
           >
-            {dosage}
+            {safeDosage}
           </text>
         )}
 

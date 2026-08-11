@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
 import { MedicineBoxSvg } from './MedicineBoxSvg';
-import { X, Plus, Minus, ShoppingBag, AlertTriangle, FileText, Lock, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { X, Plus, Minus, ShoppingBag, AlertTriangle, FileText, Lock, ShieldCheck, CheckCircle2, HelpCircle, Clock, Sparkles } from 'lucide-react';
+import { isOfferActive, getOfferStatusDetails } from '../utils/offerUtils';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -129,16 +130,39 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
               <div className="pt-1">
                 {product.stock > 0 ? (
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-black text-rose-600 text-xl sm:text-2xl font-mono">
-                      R$ {product.price.toFixed(2).replace('.', ',')}
-                    </span>
-                    {hasDiscount && (
-                      <span className="text-xs text-slate-400 line-through font-medium">
-                        PMC R$ {referencePrice?.toFixed(2).replace('.', ',')}
-                      </span>
-                    )}
-                  </div>
+                  !product.price || product.price <= 0 ? (
+                    <div className="inline-flex items-center gap-2 bg-amber-50 text-amber-900 border border-amber-200 px-3 py-1.5 rounded-xl font-extrabold text-sm">
+                      <HelpCircle className="w-4 h-4 text-amber-600" />
+                      <span>Preço Sob Consulta no Balcão</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-black text-rose-600 text-xl sm:text-2xl font-mono">
+                          R$ {product.price.toFixed(2).replace('.', ',')}
+                        </span>
+                        {hasDiscount && (
+                          <span className="text-xs text-slate-400 line-through font-medium">
+                            PMC R$ {referencePrice?.toFixed(2).replace('.', ',')}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Active Offer Banner */}
+                      {product.isOffer && isOfferActive(product) && (
+                        <div className="bg-rose-50 border border-rose-200 p-2 rounded-xl flex items-center justify-between gap-2 text-xs">
+                          <span className="font-extrabold text-rose-800 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-rose-600" />
+                            <span>{product.offerTag || 'OFERTA ESPECIAL'}</span>
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-rose-600" />
+                            <span>{getOfferStatusDetails(product).text}</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
                 ) : (
                   <div className="inline-block bg-slate-100 text-slate-600 font-extrabold text-xs px-3 py-1.5 rounded-xl border border-slate-200">
                     Sem Estoque / Indisponível para Compra
@@ -208,7 +232,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <span className="font-mono font-bold text-slate-800">{product.ean}</span>
                 </div>
               )}
-              {product.ms && (
+              {product.ms && 
+               product.ms.trim().toUpperCase() !== 'ISENTO' && 
+               !product.ms.trim().toUpperCase().includes('ISENTO') && (
                 <div>
                   <span className="text-slate-400 font-medium block">Registro MS</span>
                   <span className="font-bold text-slate-800">{product.ms}</span>
@@ -234,35 +260,47 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         <div className="p-4 bg-white border-t border-slate-200 shrink-0 shadow-lg space-y-2">
           {product.stock > 0 ? (
             <div className="flex items-center gap-3">
-              <div className="flex items-center bg-slate-100 rounded-2xl border border-slate-200 p-1">
+              {!product.price || product.price <= 0 ? (
                 <button
-                  onClick={handleDecrement}
-                  disabled={quantity <= 1}
-                  className="w-9 h-9 rounded-xl bg-white hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center font-bold text-slate-800 shadow-xs transition active:scale-95"
-                  aria-label="Diminuir"
+                  onClick={handleAdd}
+                  className="flex-1 h-12 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-600/20 active:scale-98 transition text-sm sm:text-base"
                 >
-                  <Minus className="w-4 h-4" />
+                  <HelpCircle className="w-5 h-5" />
+                  <span>Consultar Preço no Balcão</span>
                 </button>
-                <span className="w-8 text-center font-black text-slate-900 text-sm font-mono">
-                  {quantity}
-                </span>
-                <button
-                  onClick={handleIncrement}
-                  disabled={quantity >= product.stock}
-                  className="w-9 h-9 rounded-xl bg-white hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center font-bold text-slate-800 shadow-xs transition active:scale-95"
-                  aria-label="Aumentar"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+              ) : (
+                <>
+                  <div className="flex items-center bg-slate-100 rounded-2xl border border-slate-200 p-1">
+                    <button
+                      onClick={handleDecrement}
+                      disabled={quantity <= 1}
+                      className="w-9 h-9 rounded-xl bg-white hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center font-bold text-slate-800 shadow-xs transition active:scale-95"
+                      aria-label="Diminuir"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className="w-8 text-center font-black text-slate-900 text-sm font-mono">
+                      {quantity}
+                    </span>
+                    <button
+                      onClick={handleIncrement}
+                      disabled={quantity >= product.stock}
+                      className="w-9 h-9 rounded-xl bg-white hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center font-bold text-slate-800 shadow-xs transition active:scale-95"
+                      aria-label="Aumentar"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
 
-              <button
-                onClick={handleAdd}
-                className="flex-1 h-12 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-98 transition text-sm sm:text-base"
-              >
-                <ShoppingBag className="w-5 h-5" />
-                <span>Adicionar • R$ {totalPrice.toFixed(2).replace('.', ',')}</span>
-              </button>
+                  <button
+                    onClick={handleAdd}
+                    className="flex-1 h-12 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-98 transition text-sm sm:text-base"
+                  >
+                    <ShoppingBag className="w-5 h-5" />
+                    <span>Adicionar • R$ {totalPrice.toFixed(2).replace('.', ',')}</span>
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <div className="bg-slate-100 text-slate-500 p-3 rounded-xl text-center font-bold text-xs">

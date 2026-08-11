@@ -16,6 +16,8 @@ export interface Product {
   isGeneric?: boolean;
   isOffer?: boolean;
   offerTag?: string; // e.g., "Leve 3 Pague 2", "50% OFF no 2º"
+  offerStartDate?: string; // YYYY-MM-DD format
+  offerEndDate?: string; // YYYY-MM-DD format
   offerDurationType?: 'stock_or_time' | 'time_only' | 'stock_only';
   offerDurationText?: string;
   description: string;
@@ -115,5 +117,7 @@ export interface StoreSettings {
   showStockToCustomer?: boolean; // Default false
   soundEnabled: boolean;
   autoRefreshInterval: number; // in seconds
+  adminUsername?: string;
+  adminPassword?: string;
 }
 
